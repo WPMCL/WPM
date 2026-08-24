@@ -65,10 +65,22 @@ const App = {
       <div class="role-switch">
         <button data-role="rider" class="${this.state.role === 'rider' ? 'active' : ''}">Pferdebesitzer</button>
         <button data-role="driver" class="${this.state.role === 'driver' ? 'active' : ''}">Transporteur</button>
-        ${isAdmin ? `<button data-role="admin" class="${this.state.role === 'admin' ? 'active' : ''}">Admin</button>` : ''}
+        ${isAdmin ? `<button data-role="admin" class="${this.state.role === 'admin' ? 'active' : ''}">Admin <span class="nav-badge" id="adminBadge" style="display:none"></span></button>` : ''}
       </div>
       <span class="topbar-user">${esc(this.state.profile?.full_name || '')}</span>
       <button class="btn-reset" id="logoutBtn">Abmelden</button>`;
+    if (isAdmin) this.refreshAdminBadge();
+  },
+
+  /** Lädt die Zahl offener Meldungen und zeigt sie am Admin-Button. */
+  async refreshAdminBadge() {
+    try {
+      const n = await API.countOpenReports();
+      const el = document.getElementById('adminBadge');
+      if (!el) return;
+      if (n > 0) { el.textContent = n; el.style.display = ''; }
+      else { el.style.display = 'none'; }
+    } catch (e) { /* still */ }
   },
 
   bindTopbar() {
@@ -947,6 +959,10 @@ const App = {
   },
 
   lifecyclePanel(offer, viewpoint) {
+    const closed = !!offer.completedAt;
+    return this._lifecycleCore(offer, viewpoint) + this.chatPanel('offer', offer.id, closed);
+  },
+  _lifecycleCore(offer, viewpoint) {
     const info = API.cancelInfo(offer);
     const myDone = viewpoint === 'rider' ? offer.riderCompleted : offer.driverCompleted;
     const otherDone = viewpoint === 'rider' ? offer.driverCompleted : offer.riderCompleted;
@@ -1136,6 +1152,7 @@ const App = {
 
   wireLifecycleButtons(rerender, viewpoint) {
     this.startCountdowns(rerender);
+    this.wireChats();
     this.el.querySelectorAll('[data-cancel]').forEach((b) =>
       b.addEventListener('click', async () => {
         const offer = await API.getOffer(b.dataset.cancel);
@@ -1189,6 +1206,10 @@ const App = {
 
   /* ---- Lebenszyklus-Panel für Leerfahrt-Bewerbungen (analog lifecyclePanel) ---- */
   appLifecyclePanel(app, viewpoint) {
+    const closed = !!app.completedAt;
+    return this._appLifecycleCore(app, viewpoint) + this.chatPanel('application', app.id, closed);
+  },
+  _appLifecycleCore(app, viewpoint) {
     const info = API.cancelInfo(app);
     const myDone = viewpoint === 'rider' ? app.riderCompleted : app.driverCompleted;
     const otherLabel = viewpoint === 'rider' ? 'Transporteur' : 'Pferdebesitzer';
@@ -1256,6 +1277,7 @@ const App = {
 
   wireAppLifecycleButtons(rerender, viewpoint) {
     this.startCountdowns(rerender);
+    this.wireChats();
     this.el.querySelectorAll('[data-app-cancel]').forEach((b) =>
       b.addEventListener('click', async () => {
         const app = await API.getApplication(b.dataset.appCancel);
@@ -1323,6 +1345,81 @@ const App = {
       catch (e) { toast(e.message, 'err'); btn.disabled = false; btn.textContent = 'Absage beantragen'; }
     });
     document.body.appendChild(m);
+  },
+
+  /* =====================================================================
+   * IN-APP-CHAT für aktive Fahrten
+   * ctype: 'offer' | 'application', cid: die jeweilige Fahrt-ID.
+   * closed = Fahrt abgeschlossen -> Nur-Lese-Archiv.
+   * =================================================================== */
+  chatPanel(ctype, cid, closed) {
+    return `
+      <div class="chat" data-chat="${ctype}:${cid}">
+        <div class="chat-head">
+          <span>${ICON.send()} Nachrichten</span>
+          ${closed ? '<span class="badge badge-gray">Fahrt abgeschlossen · Archiv</span>' : ''}
+        </div>
+        <div class="chat-log" data-chat-log><div class="chat-empty">Nachrichten werden geladen…</div></div>
+        ${closed ? '' : `
+        <div class="chat-input">
+          <textarea data-chat-text placeholder="Nachricht schreiben…" rows="1"></textarea>
+          <button class="btn btn-primary btn-sm" data-chat-send>Senden</button>
+        </div>`}
+      </div>`;
+  },
+
+  /** Verdrahtet alle Chat-Panels im aktuellen View (laden, senden, Polling). */
+  wireChats() {
+    if (this._chatTimer) { clearInterval(this._chatTimer); this._chatTimer = null; }
+    const panels = this.el.querySelectorAll('[data-chat]');
+    if (!panels.length) return;
+    const myId = this.state.profile?.id;
+
+    const renderLog = (panel, msgs) => {
+      const log = panel.querySelector('[data-chat-log]');
+      if (!log) return;
+      if (!msgs.length) { log.innerHTML = '<div class="chat-empty">Noch keine Nachrichten. Schreib die erste!</div>'; return; }
+      const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+      log.innerHTML = msgs.map((m) => {
+        const mine = m.senderId === myId;
+        return `<div class="chat-msg ${mine ? 'mine' : 'their'}"><div class="chat-bubble">${esc(m.body)}</div><div class="chat-time">${fmtTime(m.at)}</div></div>`;
+      }).join('');
+      if (atBottom) log.scrollTop = log.scrollHeight;
+    };
+
+    const load = async (panel) => {
+      const [ctype, cid] = panel.dataset.chat.split(':');
+      try {
+        const msgs = await API.listMessages(ctype, cid);
+        renderLog(panel, msgs);
+        await API.markMessagesRead(ctype, cid);
+      } catch (e) { /* still */ }
+    };
+
+    panels.forEach((panel) => {
+      const [ctype, cid] = panel.dataset.chat.split(':');
+      load(panel);
+      const sendBtn = panel.querySelector('[data-chat-send]');
+      const text = panel.querySelector('[data-chat-text]');
+      if (sendBtn && text) {
+        const doSend = async () => {
+          const body = text.value.trim();
+          if (!body) return;
+          sendBtn.disabled = true;
+          try { await API.sendMessage(ctype, cid, body); text.value = ''; await load(panel); }
+          catch (e) { toast(e.message, 'err'); }
+          finally { sendBtn.disabled = false; text.focus(); }
+        };
+        sendBtn.addEventListener('click', doSend);
+        text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+      }
+    });
+
+    // leichtes Polling, damit neue Nachrichten der Gegenseite erscheinen
+    this._chatTimer = setInterval(() => {
+      if (!document.body.contains(panels[0])) { clearInterval(this._chatTimer); this._chatTimer = null; return; }
+      panels.forEach((panel) => load(panel));
+    }, 5000);
   },
 
   startCountdowns(rerender) {
@@ -2309,6 +2406,13 @@ function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp
 function initials(name) { return (name || '?').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?'; }
 function money(n) { return Number(n).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }); }
 function fmtDate(ts) { return new Date(ts).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+function fmtTime(ts) {
+  const d = new Date(ts); const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
 function defaultWhen() { const d = new Date(Date.now() + 3 * 3600e3); d.setMinutes(0); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
 function toLocalInput(ts) { const d = new Date(ts); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
 function dangerZone() {

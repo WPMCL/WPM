@@ -1126,6 +1126,12 @@ const API = {
     const { error } = await sb.from('reports').update({ status }).eq('id', reportId);
     if (error) throw new Error(error.message);
   },
+  /** Zahl offener Meldungen (fuer das Admin-Badge). 0, wenn kein Admin. */
+  async countOpenReports() {
+    const { data, error } = await sb.from('reports').select('id').eq('status', 'open');
+    if (error) return 0;
+    return (data || []).length;
+  },
   // Admin-Maßnahmen gegen einen Nutzer
   async warnUser(userId) {
     const { data: p } = await sb.from('profiles').select('warnings').eq('id', userId).maybeSingle();
@@ -1147,6 +1153,54 @@ const API = {
   async setOffersDisabled(userId, disabled) {
     const { error } = await sb.from('profiles').update({ offers_disabled: disabled }).eq('id', userId);
     if (error) throw new Error(error.message);
+  },
+
+  /* ==== IN-APP-CHAT (messages) ==== */
+
+  /** Nachrichten einer Fahrt laden (aufsteigend nach Zeit). */
+  async listMessages(contextType, contextId) {
+    const { data, error } = await sb.from('messages').select('*')
+      .eq('context_type', contextType).eq('context_id', contextId)
+      .order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data || []).map((m) => ({
+      id: m.id, senderId: m.sender_id, body: m.body,
+      readAt: m.read_at ? new Date(m.read_at).getTime() : null,
+      at: new Date(m.created_at).getTime(),
+    }));
+  },
+
+  /** Nachricht senden. */
+  async sendMessage(contextType, contextId, body) {
+    const u = await this.currentUser();
+    if (!u) throw new Error('Nicht angemeldet');
+    const text = String(body || '').trim();
+    if (!text) throw new Error('Leere Nachricht');
+    const { data, error } = await sb.from('messages')
+      .insert({ context_type: contextType, context_id: contextId, sender_id: u.id, body: text })
+      .select().single();
+    if (error) throw new Error(error.message);
+    return { id: data.id, senderId: data.sender_id, body: data.body, at: new Date(data.created_at).getTime(), readAt: null };
+  },
+
+  /** Eingehende, ungelesene Nachrichten einer Fahrt als gelesen markieren. */
+  async markMessagesRead(contextType, contextId) {
+    const u = await this.currentUser();
+    if (!u) return;
+    await sb.from('messages').update({ read_at: new Date().toISOString() })
+      .eq('context_type', contextType).eq('context_id', contextId)
+      .neq('sender_id', u.id).is('read_at', null);
+  },
+
+  /** Anzahl ungelesener eingehender Nachrichten einer Fahrt (fuer Badge). */
+  async countUnreadMessages(contextType, contextId) {
+    const u = await this.currentUser();
+    if (!u) return 0;
+    const { data, error } = await sb.from('messages').select('id')
+      .eq('context_type', contextType).eq('context_id', contextId)
+      .neq('sender_id', u.id).is('read_at', null);
+    if (error) return 0;
+    return (data || []).length;
   },
 };
 

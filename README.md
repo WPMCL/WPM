@@ -171,6 +171,68 @@ Die aktuelle App-Version enthält:
 * detaillierte Zuverlässigkeitsstatistik ausschließlich im Profil,
 * verpflichtende Fahrzeugangaben sowie Führerschein und Transport-Nachweis für aktive Fahrerprofile.
 
-### Datenbank
+### Zweistufige Absage (neu)
 
-Bei einer bestehenden Supabase-Datenbank zuerst `supabase-migration-cancellation.sql` ausführen. Für eine neue Installation ist die aktualisierte `supabase-schema.sql` enthalten.
+Nach Ablauf des 10-Minuten-Fensters ist eine Absage jetzt zweistufig:
+eine Seite **beantragt** die Absage mit Grund und Begründung, die andere
+Seite wird informiert und muss sie **bestätigen** (optional mit einem
+Kommentar, z. B. „Bitte rufen Sie mich an"). Erst mit der Bestätigung
+wird die Fahrt endgültig abgesagt und gilt als einvernehmlich. Der
+Antragsteller kann seinen Antrag zurückziehen, solange noch nicht
+bestätigt wurde.
+
+### Leerfahrten (neu)
+
+Transporteure können **Leerfahrten** einstellen: freie Plätze auf einer
+ohnehin geplanten Fahrt (Route A→B, Zeit, Anzahl Plätze, optionaler
+Preis und Notiz). Anders als bei regulären Anfragen gilt für Leerfahrten
+**keine 65-km-Grenze**, da diese meist von beruflichen Fahrern über
+längere Strecken angeboten werden.
+
+Pferdebesitzer sehen offene Leerfahrten in einem eigenen Tab und
+**bewerben** sich mit ihrer eigenen Teilstrecke (von wo bis wo das Pferd
+soll), der Anzahl Pferde und dem Hinweis, ob Verladehilfe nötig ist.
+
+Der Transporteur kann **mehrere Bewerbungen** annehmen (großer Hänger,
+mehrere Pferde von verschiedenen Bewerbern). Es gibt kein hartes
+Platzlimit — der belegte Stand wird nur als Hinweis angezeigt („2/4
+Plätze belegt"). Die Leerfahrt bleibt für weitere Bewerbungen offen, bis
+der Fahrer sie über **„Restliche absagen & Leerfahrt schließen"** aktiv
+schließt. Jede angenommene Fahrt hat ihren **eigenen** Lebenszyklus und
+ist separat absag- und abschließbar (inklusive Kulanzfenster,
+zweistufiger Absage und Abschlussbestätigung).
+
+### Konto löschen (neu)
+
+Reiter und Transporteure können ihr Konto im Profil endgültig löschen.
+Bestehen noch laufende Fahrten (angenommen, nicht abgeschlossen), weist
+die App darauf hin, dass diese zuerst beendet oder abgesagt werden
+müssen. Die Löschung selbst läuft über eine Datenbank-Funktion, damit der
+öffentliche anon-Key kein Konto direkt entfernen kann.
+
+### In-App-Chat & Admin-Meldungen (neu)
+
+**Fahrt-Chat.** Sobald ein Angebot bzw. eine Leerfahrt-Bewerbung
+angenommen ist, erscheint bei beiden Beteiligten ein Chat-Fenster direkt
+an der Fahrt. Es bleibt nutzbar, bis beide Seiten die Fahrt abgeschlossen
+haben, und wird danach zu einem Nur-Lese-Archiv. Nachrichten sind
+ausschließlich für die zwei Beteiligten sichtbar (per Row Level
+Security).
+
+**Meldungen für Admins.** Admin-Konten (Profil-Feld `is_admin = true`)
+sehen weiterhin den Tab „Admin" mit allen Meldungen als Ticket-Liste.
+Neu ist ein Zähler-Badge am „Admin"-Knopf, das die Zahl offener
+Meldungen anzeigt — so sieht man neue Meldungen sofort, ohne
+nachzuschauen. Dafür ist keine eigene Migration nötig.
+
+---
+
+## Hinweis zur Datenbank-Einrichtung
+
+Die Datei **`supabase-schema.sql`** enthält das **komplette** Datenmodell
+mit allen Funktionen (Anfragen, Angebote, Leerfahrten, Bewerbungen,
+Meldungen, Chat, Konto-Löschung, Selbstauskunft, zwei­stufige Absage).
+Es genügt, diese **eine** Datei einmal im Supabase-SQL-Editor auszuführen
+— es sind keine separaten Migrationsdateien mehr nötig. Das Skript ist so
+geschrieben, dass es gefahrlos erneut ausgeführt werden kann (es legt nur
+an, was noch fehlt).
