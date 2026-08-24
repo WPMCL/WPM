@@ -337,7 +337,7 @@ const App = {
                 <div class="faq-body">
                   <p>Sie benötigen ein geeignetes Zugfahrzeug mit Pferdeanhänger oder einen Pferdetransporter, die passende Ausstattung für einen sicheren Transport sowie die zum Gespann passende Führerscheinklasse (in der Regel B mit Anhänger beziehungsweise BE).</p>
                   <p>Ob Sie <b>privat</b> oder <b>gewerblich</b> unterwegs sind, geben Sie in Ihrem Profil an und macht rechtlich einen Unterschied: Für den gelegentlichen, nicht wirtschaftlichen Transport des eigenen Pferdebestands gelten geringere Anforderungen. Sobald Sie im Zusammenhang mit einer wirtschaftlichen Tätigkeit transportieren, sind zusätzlich die Nachweise nach der EU-Tiertransportverordnung (EG) Nr. 1/2005 erforderlich. Den vollständigen Verordnungstext finden Sie bei <a href="https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:32005R0001" target="_blank" rel="noopener">EUR-Lex</a>.</p>
-                  <p>Statt Dokumente hochzuladen, bestätigen Sie die relevanten Punkte in Ihrem Profil per Selbstauskunft (gültige Fahrerlaubnis, verkehrssicheres Gespann und, wo einschlägig, Nachweise nach EU-VO 1/2005 sowie Anhänger-Haftpflicht). Welche Voraussetzungen im Einzelfall gelten, hängt von Zweck, Entfernung und Dauer der Fahrt ab. Als Transporteur haften Sie für die Richtigkeit Ihrer Angaben.</p>
+                  <p>Transporteure bestätigen die relevanten Punkte in ihrem Profil per Selbstauskunft (gültige Fahrerlaubnis, verkehrssicheres Gespann und, wo einschlägig, Nachweise nach EU-VO 1/2005 sowie Anhänger-Haftpflicht). Welche Voraussetzungen im Einzelfall gelten, hängt von Zweck, Entfernung und Dauer der Fahrt ab. Als Transporteur haften Sie für die Richtigkeit Ihrer Angaben.</p>
                 </div>
               </details>
               <details class="faq-item">
@@ -531,6 +531,7 @@ const App = {
         <div class="tabs" id="riderTabs">
           <button data-tab="anfrage">Anfrage stellen</button>
           <button data-tab="auftraege">Meine Anfragen</button>
+          <button data-tab="leerfahrten">Leerfahrten</button>
           <button data-tab="profil">Mein Profil</button>
         </div>
         <div id="riderBody"></div>
@@ -542,6 +543,7 @@ const App = {
     const body = document.getElementById('riderBody');
     if (this.state.riderTab === 'anfrage') this.riderRequestForm(body);
     else if (this.state.riderTab === 'auftraege') this.riderRequests(body);
+    else if (this.state.riderTab === 'leerfahrten') this.riderEmptyRuns(body);
     else this.riderProfile(body);
   },
 
@@ -550,40 +552,58 @@ const App = {
     let rider = await API.getRider(this.state.riderId);
     if (token !== this._renderToken) return; // zwischenzeitlich neu gerendert
     if (!rider) rider = { location: { label: '', lat: null, lng: null }, horse: {} };
-    // Startadresse aus Profil vorbelegen, falls vorhanden
-    if (!this.state.draft.pickup && rider.location && rider.location.lat != null) {
+
+    // Bearbeiten-Modus: Werte der zu bearbeitenden Anfrage in den Draft laden
+    const editId = this.state.editingRequestId || null;
+    let editReq = null;
+    if (editId) {
+      editReq = await API.getRequest(editId);
+      if (token !== this._renderToken) return;
+      if (editReq) {
+        this.state.draft = {
+          pickup: { ...editReq.pickup },
+          dropoff: { ...editReq.dropoff },
+          route: { km: editReq.routeKm, minutes: editReq.routeMinutes, line: editReq.routeLine },
+        };
+      }
+    }
+
+    // Startadresse aus Profil vorbelegen, falls vorhanden (nur im Neu-Modus)
+    if (!editId && !this.state.draft.pickup && rider.location && rider.location.lat != null) {
       this.state.draft.pickup = { ...rider.location };
     }
     const d = this.state.draft;
+    const isEdit = !!editReq;
 
     body.innerHTML = `
       <div class="grid grid-2-wide">
         <div class="card">
-          <div class="card-head"><h2>Neue Transportanfrage</h2></div>
+          <div class="card-head"><h2>${isEdit ? 'Anfrage bearbeiten' : 'Neue Transportanfrage'}</h2>${isEdit ? '<button class="btn-reset" id="cancelEdit">Abbrechen</button>' : ''}</div>
           <div class="card-pad">
+            ${isEdit ? '<div class="notice-neutral" style="margin-bottom:16px">Du bearbeitest eine bestehende Anfrage. Das ist möglich, solange noch kein Angebot vorliegt.</div>' : ''}
             ${addrField('pickup', 'Abholadresse', d.pickup?.label || '', 'Stall, Hof oder Adresse eingeben')}
             ${addrField('dropoff', 'Zieladresse', d.dropoff?.label || '', 'Zieladresse eingeben')}
             <label class="field"><span>Wann?</span>
-              <input type="datetime-local" id="when" value="${defaultWhen()}">
+              <input type="datetime-local" id="when" value="${isEdit ? toLocalInput(editReq.when) : defaultWhen()}">
             </label>
             <div class="field-row">
               <div>
                 <label class="field" style="margin-bottom:8px"><span>Anzahl Pferde</span></label>
-                ${stepperField('horseCount', 1, 1, 8)}
+                ${stepperField('horseCount', isEdit ? editReq.horseCount : 1, 1, 8)}
               </div>
               <div>
                 <label class="field" style="margin-bottom:8px"><span>&nbsp;</span></label>
                 <div class="switch-row" style="padding:0;height:40px;align-items:center">
                   <div><div class="switch-label">Verladehilfe</div></div>
-                  <label class="switch"><input type="checkbox" id="loadingHelp"><span class="track"></span></label>
+                  <label class="switch"><input type="checkbox" id="loadingHelp" ${isEdit && editReq.loadingHelp ? 'checked' : ''}><span class="track"></span></label>
                 </div>
               </div>
             </div>
             <div class="switch-row" style="border-top:1px solid var(--line);padding-top:16px">
               <div><div class="switch-label">Dringend</div><div class="switch-sub">Z. B. Transport in die Tierklinik</div></div>
-              <label class="switch"><input type="checkbox" id="urgent"><span class="track"></span></label>
+              <label class="switch"><input type="checkbox" id="urgent" ${isEdit && editReq.urgent ? 'checked' : ''}><span class="track"></span></label>
             </div>
-            <button class="btn btn-primary btn-block" id="submitReq" style="margin-top:20px" disabled>${ICON.send()} Route wählen, dann senden</button>
+            <button class="btn btn-primary btn-block" id="submitReq" style="margin-top:20px" ${isEdit ? '' : 'disabled'}>${isEdit ? ICON.check() + ' Änderungen speichern' : ICON.send() + ' Route wählen, dann senden'}</button>
           </div>
         </div>
         <div class="card">
@@ -604,27 +624,42 @@ const App = {
     this.wireStepper('horseCount');
     if (d.pickup && d.dropoff && d.route) this.updateRoutePreview();
 
+    // Bearbeiten abbrechen -> zurück zur Anfragenliste, Draft verwerfen
+    document.getElementById('cancelEdit') && document.getElementById('cancelEdit').addEventListener('click', () => {
+      this.state.editingRequestId = null;
+      this.state.draft = { pickup: rider.location ? { ...rider.location } : null, dropoff: null, route: null };
+      this.state.riderTab = 'auftraege';
+      this.renderRider();
+    });
+
     document.getElementById('submitReq') && document.getElementById('submitReq').addEventListener('click', async () => {
       const btn = document.getElementById('submitReq');
       if (!d.pickup || !d.dropoff) { toast('Bitte Abhol- und Zieladresse wählen', 'err'); return; }
-      btn.disabled = true; btn.innerHTML = 'Sende…';
+      btn.disabled = true; btn.innerHTML = isEdit ? 'Speichere…' : 'Sende…';
+      const payload = {
+        pickup: d.pickup, dropoff: d.dropoff,
+        when: new Date(val('when')).getTime(),
+        urgent: document.getElementById('urgent').checked,
+        horseCount: +val('horseCount'),
+        loadingHelp: document.getElementById('loadingHelp').checked,
+        route: d.route,
+      };
       try {
-        await API.createRequest({
-          riderId: this.state.riderId,
-          pickup: d.pickup, dropoff: d.dropoff,
-          when: new Date(val('when')).getTime(),
-          urgent: document.getElementById('urgent').checked,
-          horseCount: +val('horseCount'),
-          loadingHelp: document.getElementById('loadingHelp').checked,
-          route: d.route,
-        });
-        this.state.draft = { pickup: { ...rider.location }, dropoff: null, route: null };
-        toast('Anfrage gesendet', 'ok');
+        if (isEdit) {
+          await API.updateRequest(editId, payload);
+          this.state.editingRequestId = null;
+          this.state.draft = { pickup: rider.location ? { ...rider.location } : null, dropoff: null, route: null };
+          toast('Anfrage aktualisiert', 'ok');
+        } else {
+          await API.createRequest({ riderId: this.state.riderId, ...payload });
+          this.state.draft = { pickup: { ...rider.location }, dropoff: null, route: null };
+          toast('Anfrage gesendet', 'ok');
+        }
         this.state.riderTab = 'auftraege';
         this.renderRider();
       } catch (e) {
         toast(e.message, 'err');
-        btn.disabled = false; btn.innerHTML = `${ICON.send()} Anfrage senden`;
+        btn.disabled = false; btn.innerHTML = isEdit ? `${ICON.check()} Änderungen speichern` : `${ICON.send()} Anfrage senden`;
       }
     });
   },
@@ -800,10 +835,19 @@ const App = {
     }[req.status];
 
     let offersHtml = '';
+    let editActions = '';
     if (req.status === 'open') {
-      offersHtml = pending.length
-        ? `<div class="section-label" style="margin-top:20px">Angebote (${pending.length})</div><div class="list">${pending.map((o) => this.offerCard(o)).join('')}</div>`
-        : `<div class="hint" style="margin-top:18px">Deine Anfrage ist aktiv. Sobald ein Transporteur ein Angebot abgibt, erscheint es hier.</div>`;
+      if (pending.length) {
+        offersHtml = `<div class="section-label" style="margin-top:20px">Angebote (${pending.length})</div><div class="list">${pending.map((o) => this.offerCard(o)).join('')}</div>`;
+      } else {
+        offersHtml = `<div class="hint" style="margin-top:18px">Deine Anfrage ist aktiv. Sobald ein Transporteur ein Angebot abgibt, erscheint es hier.</div>`;
+        // Solange noch KEIN Angebot vorliegt, darf der Reiter die Anfrage
+        // bearbeiten oder loeschen (z. B. bei zu kurzfristiger Anfrage).
+        editActions = `<div class="item-actions" style="margin-top:16px">
+          <button class="btn btn-secondary btn-sm" data-edit-request="${req.id}">${ICON.edit()} Anfrage bearbeiten</button>
+          <button class="btn btn-danger btn-sm" data-delete-request="${req.id}">Anfrage löschen</button>
+        </div>`;
+      }
     } else if (accepted) {
       offersHtml = `<div class="section-label" style="margin-top:20px">Angenommenes Angebot</div><div class="list">${this.offerCard(accepted, true)}</div>`;
     }
@@ -823,6 +867,7 @@ const App = {
           ${statusBadge}
         </div>
         <div class="map-sm" id="map-${req.id}" style="margin-top:16px"></div>
+        ${editActions}
         ${offersHtml}
       </div>`;
   },
@@ -933,8 +978,41 @@ const App = {
         <p style="font-size:14px;font-weight:500;margin-bottom:10px">Wie war die Fahrt? Bewerte ${viewpoint === 'rider' ? 'den Transporteur' : 'den Pferdebesitzer'}.</p>
         ${ratingWidget(offer.id)}</div>`;
     }
+    // --- Zweistufige Absage: liegt ein Antrag vor? ---
+    if (offer.cancelRequestedBy) {
+      const iRequested = offer.cancelRequestedBy === viewpoint;
+      const catLabel = cancelCategoryLabel(offer.cancelRequestCategory);
+      const reasonHtml = offer.cancelRequestReason
+        ? `<div class="cancelreq-reason">„${esc(offer.cancelRequestReason)}"</div>` : '';
+      if (iRequested) {
+        // Ich habe beantragt -> warte auf Bestätigung, kann zurückziehen
+        return `<div class="lifecycle">${steps(2)}
+          <div class="cancelreq cancelreq-mine">
+            <div class="cancelreq-head">${ICON.clock()} Deine Absage wurde beantragt</div>
+            <p class="cancelreq-lead">${esc(otherLabel)} wurde informiert und muss die Absage bestätigen. Bis dahin bleibt die Fahrt bestehen.</p>
+            <div class="cancelreq-meta"><b>Grund:</b> ${esc(catLabel)}</div>
+            ${reasonHtml}
+            <button class="btn btn-secondary btn-sm" data-withdraw-cancel="${offer.id}" style="margin-top:12px">Antrag zurückziehen</button>
+          </div>
+        </div>`;
+      }
+      // Die andere Seite hat beantragt -> ich bestätige (mit Kommentar)
+      return `<div class="lifecycle">${steps(2)}
+        <div class="cancelreq cancelreq-incoming">
+          <div class="cancelreq-head">${ICON.alert()} ${esc(otherLabel)} möchte die Fahrt absagen</div>
+          <p class="cancelreq-lead">Bitte prüfe den Grund. Wenn du zustimmst, bestätige die Absage. Du kannst einen kurzen Kommentar hinterlassen (z. B. „Bitte rufen Sie mich an").</p>
+          <div class="cancelreq-meta"><b>Grund:</b> ${esc(catLabel)}</div>
+          ${reasonHtml}
+          <label class="field" style="margin-top:12px"><span>Kommentar (optional)</span><textarea data-confirm-comment="${offer.id}" placeholder="z. B. Bitte rufen Sie mich an: 0170 …" style="min-height:70px"></textarea></label>
+          <div class="item-actions" style="margin:0">
+            <button class="btn btn-danger btn-sm" data-confirm-cancel="${offer.id}">Absage bestätigen</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
     return `<div class="lifecycle">${steps(2)}
-      <p class="meta" style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Die ersten 10 Minuten sind abgelaufen. Die Fahrt ist vereinbart. Änderungen und Absagen sind weiterhin möglich, nach Ablauf des Fensters jedoch nur mit Begründung.</p>
+      <p class="meta" style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Die ersten 10 Minuten sind abgelaufen. Die Fahrt ist vereinbart. Eine Absage muss jetzt begründet und von der anderen Seite bestätigt werden.</p>
       ${myDone
         ? `<div class="hint" style="color:var(--green)">${ICON.check()} Du hast bestätigt. Warte auf ${otherLabel}.</div>`
         : `<div class="item-actions" style="margin:0"><button class="btn btn-success btn-sm" data-complete="${offer.id}">Fahrt erfolgreich abgeschlossen</button><button class="btn btn-danger btn-sm" data-cancel="${offer.id}">Fahrt absagen</button></div>`}
@@ -952,27 +1030,106 @@ const App = {
       }));
     this.el.querySelectorAll('[data-reject]').forEach((b) =>
       b.addEventListener('click', async () => { await API.rejectOffer(b.dataset.reject); toast('Angebot abgelehnt'); this.renderRider(); }));
+    // Offene Anfrage bearbeiten -> ins Formular mit vorbefuellten Werten
+    this.el.querySelectorAll('[data-edit-request]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.state.editingRequestId = b.dataset.editRequest;
+        this.state.riderTab = 'anfrage';
+        this.renderRider();
+      }));
+    // Offene Anfrage loeschen (mit Rueckfrage)
+    this.el.querySelectorAll('[data-delete-request]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.confirmModal('Anfrage löschen?', 'Möchtest du diese Anfrage wirklich löschen? Das kann nicht rückgängig gemacht werden.', 'Löschen', async () => {
+          try { await API.deleteRequest(b.dataset.deleteRequest); toast('Anfrage gelöscht', 'ok'); this.renderRider(); }
+          catch (e) { toast(e.message, 'err'); this.renderRider(); }
+        });
+      }));
+  },
+
+  /**
+   * Wiederverwendbarer Bestätigungsdialog.
+   * onConfirm wird beim Klick auf den Bestätigen-Button ausgeführt.
+   */
+  confirmModal(title, message, confirmLabel, onConfirm, { danger = true, infoOnly = false } = {}) {
+    const m = document.createElement('div'); m.className = 'modal-bg';
+    m.innerHTML = `<div class="modal"><div class="card-head"><h3>${esc(title)}</h3><button class="btn-reset" data-close>Schließen</button></div><div class="card-pad">
+      <p style="margin:0 0 18px;line-height:1.55;color:var(--ink-2)">${esc(message)}</p>
+      <div class="item-actions" style="margin:0;justify-content:flex-end">
+        ${infoOnly ? '' : '<button class="btn btn-secondary btn-sm" data-close>Abbrechen</button>'}
+        <button class="btn ${danger ? 'btn-danger' : 'btn-primary'} btn-sm" data-confirm>${esc(confirmLabel)}</button>
+      </div>
+    </div></div>`;
+    m.addEventListener('click', (e) => { if (e.target === m || e.target.hasAttribute('data-close')) m.remove(); });
+    m.querySelector('[data-confirm]').addEventListener('click', async () => {
+      const btn = m.querySelector('[data-confirm]'); btn.disabled = true;
+      try { await onConfirm(); m.remove(); }
+      catch (e) { m.remove(); }
+    });
+    document.body.appendChild(m);
+  },
+
+  /**
+   * Verdrahtet den "Konto löschen"-Button in beiden Profilen.
+   * Bei laufenden Fahrten: Hinweis, dass diese zuerst beendet/abgesagt
+   * werden müssen. Sonst: Bestätigung und endgültige Löschung.
+   */
+  wireDeleteAccount() {
+    const btn = document.getElementById('deleteAccount');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; const label = btn.textContent; btn.textContent = 'Prüfe…';
+      let active = 0;
+      try { active = await API.activeTripsCount(); }
+      catch (e) { toast(e.message, 'err'); btn.disabled = false; btn.textContent = label; return; }
+      btn.disabled = false; btn.textContent = label;
+
+      if (active > 0) {
+        // Nur Hinweis, keine Löschung — Fenster schließt sich per Button.
+        this.confirmModal(
+          'Konto kann noch nicht gelöscht werden',
+          `Es ${active === 1 ? 'besteht noch 1 laufende Fahrt' : 'bestehen noch ' + active + ' laufende Fahrten'}. Bitte beende oder storniere ${active === 1 ? 'diese' : 'alle'} zuerst. Danach kannst du dein Konto löschen.`,
+          'Verstanden',
+          async () => {},
+          { danger: false, infoOnly: true },
+        );
+        return;
+      }
+
+      // Keine laufenden Fahrten -> endgültige Löschung bestätigen
+      this.confirmModal(
+        'Konto endgültig löschen?',
+        'Dein Konto und alle deine Daten (Profil, Anfragen, Angebote) werden unwiderruflich gelöscht. Dieser Schritt kann nicht rückgängig gemacht werden.',
+        'Konto löschen',
+        async () => {
+          try {
+            await API.deleteAccount();
+            toast('Konto gelöscht', 'ok');
+            this.state = this.freshState ? this.freshState() : this.state;
+            location.reload();
+          } catch (e) { toast(e.message, 'err'); }
+        },
+      );
+    });
   },
 
   showCancelModal(offerId, viewpoint, rerender, offer) {
-    const cats=[['horse','Pferd krank oder verletzt'],['schedule','Terminänderung'],['not_needed','Transport nicht mehr erforderlich'],['vehicle','Fahrzeug oder Anhänger nicht verfügbar'],['safety','Sicherheitsbedenken'],['emergency','Persönlicher Notfall'],['not_arrived','Nicht erschienen'],['mutual','Einvernehmliche Absage'],['other','Sonstiger Grund']];
+    const otherLabel = viewpoint === 'rider' ? 'Transporteur' : 'Pferdebesitzer';
     const m=document.createElement('div'); m.className='modal-bg';
-    m.innerHTML=`<div class="modal"><div class="card-head"><h3>Fahrt absagen</h3><button class="btn-reset" data-close>Schließen</button></div><div class="card-pad">
-      <div class="notice-neutral" style="margin-bottom:16px"><b>Die ersten 10 Minuten sind abgelaufen.</b> Bitte begründe deine Absage. Zeitpunkt und Grund werden für die Zuverlässigkeitsstatistik dokumentiert.</div>
-      <label class="field"><span>Grund</span><select id="cancelCat">${cats.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+    m.innerHTML=`<div class="modal"><div class="card-head"><h3>Absage beantragen</h3><button class="btn-reset" data-close>Schließen</button></div><div class="card-pad">
+      <div class="notice-neutral" style="margin-bottom:16px"><b>Die ersten 10 Minuten sind abgelaufen.</b> Die Fahrt ist verbindlich. Du kannst die Absage beantragen — sie wird erst wirksam, wenn ${esc(otherLabel)} sie bestätigt. Zeitpunkt und Grund werden für die Zuverlässigkeitsstatistik dokumentiert.</div>
+      <label class="field"><span>Grund</span><select id="cancelCat">${CANCEL_CATEGORIES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
       <label class="field"><span>Begründung *</span><textarea id="cancelReason" placeholder="Beschreibe kurz, was passiert ist." style="min-height:110px"></textarea></label>
-      <label class="consent-row"><input type="checkbox" id="cancelMutual"><span>Die Absage wurde mit der anderen Seite abgestimmt.</span></label>
       <div class="notice-neutral" style="margin-top:10px"><b>Vereinbarte Stornobedingung:</b> ${formatCancelRule(offer)}</div>
-      <button class="btn btn-danger btn-block" id="confirmCancel">Fahrt absagen</button>
+      <button class="btn btn-danger btn-block" id="confirmCancel">Absage beantragen</button>
     </div></div>`;
     m.addEventListener('click',e=>{if(e.target===m||e.target.hasAttribute('data-close'))m.remove();});
-    m.querySelector('#cancelCat').addEventListener('change',e=>{m.querySelector('#cancelMutual').checked=e.target.value==='mutual';});
     m.querySelector('#confirmCancel').addEventListener('click',async()=>{
-      const reason=m.querySelector('#cancelReason').value.trim(), cat=m.querySelector('#cancelCat').value, mutual=m.querySelector('#cancelMutual').checked||cat==='mutual';
+      const reason=m.querySelector('#cancelReason').value.trim(), cat=m.querySelector('#cancelCat').value;
       if(!reason){toast('Bitte begründe die Absage','err');return;}
-      const btn=m.querySelector('#confirmCancel'); btn.disabled=true; btn.textContent='Wird gespeichert…';
-      try{await API.cancelTrip(offerId,viewpoint,cat,reason,mutual);m.remove();toast(mutual?'Einvernehmliche Absage gespeichert':'Fahrt abgesagt','ok');rerender();}
-      catch(e){toast(e.message,'err');btn.disabled=false;btn.textContent='Fahrt absagen';}
+      const btn=m.querySelector('#confirmCancel'); btn.disabled=true; btn.textContent='Wird gesendet…';
+      try{await API.requestCancellation(offerId,viewpoint,cat,reason);m.remove();toast('Absage beantragt — '+otherLabel+' muss noch bestätigen','ok');rerender();}
+      catch(e){toast(e.message,'err');btn.disabled=false;btn.textContent='Absage beantragen';}
     });
     document.body.appendChild(m);
   },
@@ -989,6 +1146,23 @@ const App = {
         } else {
           this.showCancelModal(b.dataset.cancel, viewpoint, rerender, offer);
         }
+      }));
+    // Antragsteller zieht seinen Absage-Antrag zurück
+    this.el.querySelectorAll('[data-withdraw-cancel]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = 'Wird zurückgezogen…';
+        try { await API.withdrawCancellation(b.dataset.withdrawCancel, viewpoint); toast('Absage-Antrag zurückgezogen', 'ok'); rerender(); }
+        catch (e) { toast(e.message, 'err'); rerender(); }
+      }));
+    // Gegenseite bestätigt die beantragte Absage (mit optionalem Kommentar)
+    this.el.querySelectorAll('[data-confirm-cancel]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const id = b.dataset.confirmCancel;
+        const ta = this.el.querySelector(`[data-confirm-comment="${id}"]`);
+        const comment = ta ? ta.value.trim() : '';
+        b.disabled = true; b.textContent = 'Wird bestätigt…';
+        try { await API.confirmCancellation(id, viewpoint, comment); toast('Absage bestätigt', 'ok'); rerender(); }
+        catch (e) { toast(e.message, 'err'); rerender(); }
       }));
     this.el.querySelectorAll('[data-complete]').forEach((b) =>
       b.addEventListener('click', async () => {
@@ -1011,6 +1185,144 @@ const App = {
           w.dataset.stars = s.dataset.star;
           w.querySelectorAll('[data-star]').forEach((x) => x.classList.toggle('on', +x.dataset.star <= +s.dataset.star));
         })));
+  },
+
+  /* ---- Lebenszyklus-Panel für Leerfahrt-Bewerbungen (analog lifecyclePanel) ---- */
+  appLifecyclePanel(app, viewpoint) {
+    const info = API.cancelInfo(app);
+    const myDone = viewpoint === 'rider' ? app.riderCompleted : app.driverCompleted;
+    const otherLabel = viewpoint === 'rider' ? 'Transporteur' : 'Pferdebesitzer';
+    const steps = (active) => `
+      <div class="lc-steps">
+        <div class="lc-step ${active >= 1 ? (active > 1 ? 'done' : 'active') : ''}"><span class="lc-num">${active > 1 ? '' : '1'}</span>Bestätigt</div>
+        <div class="lc-line"></div>
+        <div class="lc-step ${active >= 2 ? (active > 2 ? 'done' : 'active') : ''}"><span class="lc-num">${active > 2 ? '' : '2'}</span>Fahrt</div>
+        <div class="lc-line"></div>
+        <div class="lc-step ${active >= 3 ? 'active' : ''}"><span class="lc-num">3</span>Abschluss</div>
+      </div>`;
+
+    if (info.open) {
+      return `<div class="lifecycle">${steps(1)}
+        <div class="countdown"><span class="cd-time" data-countdown="${app.acceptedAt}" data-window="${app.cancelWindowMs}">–:––</span><span class="cd-lbl">bis zur verbindlichen Buchung</span></div>
+        <p class="meta" style="font-size:13px;color:var(--ink-3);margin-bottom:14px">In diesem Zeitfenster kann jede Seite kostenlos absagen. Danach ist die Buchung verbindlich.</p>
+        <button class="btn btn-danger btn-sm" data-app-cancel="${app.id}">Fahrt absagen</button>
+      </div>`;
+    }
+    if (app.completedAt) {
+      const myRating = viewpoint === 'rider' ? app.ratingByRider : app.ratingByDriver;
+      if (myRating) {
+        return `<div class="lifecycle">${steps(4)}
+          <div class="hint">Deine Bewertung: ${starsInline(myRating.stars)} ${myRating.comment ? '· „' + esc(myRating.comment) + '"' : ''}</div></div>`;
+      }
+      return `<div class="lifecycle">${steps(3)}
+        <p style="font-size:14px;font-weight:500;margin-bottom:10px">Wie war die Fahrt? Bewerte ${viewpoint === 'rider' ? 'den Transporteur' : 'den Pferdebesitzer'}.</p>
+        ${ratingWidget(app.id, 'app')}</div>`;
+    }
+    if (app.cancelRequestedBy) {
+      const iRequested = app.cancelRequestedBy === viewpoint;
+      const catLabel = cancelCategoryLabel(app.cancelRequestCategory);
+      const reasonHtml = app.cancelRequestReason ? `<div class="cancelreq-reason">„${esc(app.cancelRequestReason)}"</div>` : '';
+      if (iRequested) {
+        return `<div class="lifecycle">${steps(2)}
+          <div class="cancelreq cancelreq-mine">
+            <div class="cancelreq-head">${ICON.clock()} Deine Absage wurde beantragt</div>
+            <p class="cancelreq-lead">${esc(otherLabel)} wurde informiert und muss die Absage bestätigen. Bis dahin bleibt die Fahrt bestehen.</p>
+            <div class="cancelreq-meta"><b>Grund:</b> ${esc(catLabel)}</div>
+            ${reasonHtml}
+            <button class="btn btn-secondary btn-sm" data-app-withdraw-cancel="${app.id}" style="margin-top:12px">Antrag zurückziehen</button>
+          </div>
+        </div>`;
+      }
+      return `<div class="lifecycle">${steps(2)}
+        <div class="cancelreq cancelreq-incoming">
+          <div class="cancelreq-head">${ICON.alert()} ${esc(otherLabel)} möchte die Fahrt absagen</div>
+          <p class="cancelreq-lead">Bitte prüfe den Grund. Wenn du zustimmst, bestätige die Absage. Du kannst einen kurzen Kommentar hinterlassen.</p>
+          <div class="cancelreq-meta"><b>Grund:</b> ${esc(catLabel)}</div>
+          ${reasonHtml}
+          <label class="field" style="margin-top:12px"><span>Kommentar (optional)</span><textarea data-app-confirm-comment="${app.id}" placeholder="z. B. Bitte rufen Sie mich an: 0170 …" style="min-height:70px"></textarea></label>
+          <div class="item-actions" style="margin:0">
+            <button class="btn btn-danger btn-sm" data-app-confirm-cancel="${app.id}">Absage bestätigen</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `<div class="lifecycle">${steps(2)}
+      <p class="meta" style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Die Fahrt ist vereinbart. Eine Absage muss jetzt begründet und von der anderen Seite bestätigt werden.</p>
+      ${myDone
+        ? `<div class="hint" style="color:var(--green)">${ICON.check()} Du hast bestätigt. Warte auf ${otherLabel}.</div>`
+        : `<div class="item-actions" style="margin:0"><button class="btn btn-success btn-sm" data-app-complete="${app.id}">Fahrt erfolgreich abgeschlossen</button><button class="btn btn-danger btn-sm" data-app-cancel="${app.id}">Fahrt absagen</button></div>`}
+    </div>`;
+  },
+
+  wireAppLifecycleButtons(rerender, viewpoint) {
+    this.startCountdowns(rerender);
+    this.el.querySelectorAll('[data-app-cancel]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const app = await API.getApplication(b.dataset.appCancel);
+        if (API.cancelInfo(app).open) {
+          b.disabled = true;
+          try { await API.cancelApplicationTrip(b.dataset.appCancel, viewpoint); toast('Fahrt abgesagt', 'ok'); rerender(); }
+          catch (e) { toast(e.message, 'err'); rerender(); }
+        } else {
+          this.showAppCancelModal(b.dataset.appCancel, viewpoint, rerender);
+        }
+      }));
+    this.el.querySelectorAll('[data-app-withdraw-cancel]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = 'Wird zurückgezogen…';
+        try { await API.withdrawAppCancellation(b.dataset.appWithdrawCancel, viewpoint); toast('Absage-Antrag zurückgezogen', 'ok'); rerender(); }
+        catch (e) { toast(e.message, 'err'); rerender(); }
+      }));
+    this.el.querySelectorAll('[data-app-confirm-cancel]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const id = b.dataset.appConfirmCancel;
+        const ta = this.el.querySelector(`[data-app-confirm-comment="${id}"]`);
+        const comment = ta ? ta.value.trim() : '';
+        b.disabled = true; b.textContent = 'Wird bestätigt…';
+        try { await API.confirmAppCancellation(id, viewpoint, comment); toast('Absage bestätigt', 'ok'); rerender(); }
+        catch (e) { toast(e.message, 'err'); rerender(); }
+      }));
+    this.el.querySelectorAll('[data-app-complete]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = 'Bestätige…';
+        try { await API.confirmAppCompletion(b.dataset.appComplete, viewpoint); toast('Abschluss bestätigt', 'ok'); rerender(); }
+        catch (e) { toast(e.message, 'err'); rerender(); }
+      }));
+    // App-Bewertung (rating-widget mit data-app-rate)
+    this.el.querySelectorAll('[data-app-rate]').forEach((btn) =>
+      btn.addEventListener('click', async () => {
+        const w = btn.closest('.rating-widget'); const s = +w.dataset.stars;
+        if (!s) { toast('Bitte Sterne wählen', 'err'); return; }
+        btn.disabled = true;
+        try { await API.rateAppTrip(btn.dataset.appRate, viewpoint, s, w.querySelector('textarea').value); toast('Danke für deine Bewertung', 'ok'); rerender(); }
+        catch (e) { toast(e.message, 'err'); rerender(); }
+      }));
+    this.el.querySelectorAll('.rating-widget').forEach((w) =>
+      w.querySelectorAll('[data-star]').forEach((s) =>
+        s.addEventListener('click', () => {
+          w.dataset.stars = s.dataset.star;
+          w.querySelectorAll('[data-star]').forEach((x) => x.classList.toggle('on', +x.dataset.star <= +s.dataset.star));
+        })));
+  },
+
+  showAppCancelModal(applicationId, viewpoint, rerender) {
+    const otherLabel = viewpoint === 'rider' ? 'Transporteur' : 'Pferdebesitzer';
+    const m = document.createElement('div'); m.className = 'modal-bg';
+    m.innerHTML = `<div class="modal"><div class="card-head"><h3>Absage beantragen</h3><button class="btn-reset" data-close>Schließen</button></div><div class="card-pad">
+      <div class="notice-neutral" style="margin-bottom:16px"><b>Die ersten 10 Minuten sind abgelaufen.</b> Du kannst die Absage beantragen — sie wird erst wirksam, wenn ${esc(otherLabel)} sie bestätigt.</div>
+      <label class="field"><span>Grund</span><select id="acCat">${CANCEL_CATEGORIES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
+      <label class="field"><span>Begründung *</span><textarea id="acReason" placeholder="Beschreibe kurz, was passiert ist." style="min-height:110px"></textarea></label>
+      <button class="btn btn-danger btn-block" id="acConfirm">Absage beantragen</button>
+    </div></div>`;
+    m.addEventListener('click', (e) => { if (e.target === m || e.target.hasAttribute('data-close')) m.remove(); });
+    m.querySelector('#acConfirm').addEventListener('click', async () => {
+      const reason = m.querySelector('#acReason').value.trim(), cat = m.querySelector('#acCat').value;
+      if (!reason) { toast('Bitte begründe die Absage', 'err'); return; }
+      const btn = m.querySelector('#acConfirm'); btn.disabled = true; btn.textContent = 'Wird gesendet…';
+      try { await API.requestAppCancellation(applicationId, viewpoint, cat, reason); m.remove(); toast('Absage beantragt — ' + otherLabel + ' muss noch bestätigen', 'ok'); rerender(); }
+      catch (e) { toast(e.message, 'err'); btn.disabled = false; btn.textContent = 'Absage beantragen'; }
+    });
+    document.body.appendChild(m);
   },
 
   startCountdowns(rerender) {
@@ -1137,10 +1449,12 @@ const App = {
           </div>
         </div>
       </div>
-      <div style="margin-top:22px"><button class="btn btn-primary" id="saveRider">Änderungen speichern</button></div>`;
+      <div style="margin-top:22px"><button class="btn btn-primary" id="saveRider">Änderungen speichern</button></div>
+      ${dangerZone()}`;
 
     this.state.draft._rloc = rider.location && rider.location.lat != null ? { ...rider.location } : null;
     this.wireAddrFieldSimple('rloc', (loc) => { this.state.draft._rloc = loc; });
+    this.wireDeleteAccount();
     document.getElementById('saveRider').addEventListener('click', async () => {
       const btn = document.getElementById('saveRider'); btn.disabled = true; btn.textContent = 'Speichere…';
       const patch = {
@@ -1201,6 +1515,7 @@ const App = {
         <div class="tabs" id="driverTabs">
           <button data-tab="auftraege">Passende Anfragen</button>
           <button data-tab="angebote">Meine Angebote</button>
+          <button data-tab="leerfahrten">Meine Leerfahrten</button>
           <button data-tab="profil">Mein Profil</button>
         </div>
         <div id="driverBody"></div>
@@ -1212,6 +1527,7 @@ const App = {
     const body = document.getElementById('driverBody');
     if (this.state.driverTab === 'auftraege') this.driverRequests(body);
     else if (this.state.driverTab === 'angebote') this.driverOffers(body);
+    else if (this.state.driverTab === 'leerfahrten') this.driverEmptyRuns(body);
     else this.driverProfile(body);
   },
 
@@ -1296,6 +1612,441 @@ const App = {
           ${rider ? `<button class="btn btn-secondary btn-sm" data-ratings-rider="${rider.id}" data-name="${esc(rider.name)}">${ICON.star(true)} Pferdebesitzer-Bewertungen</button>` : ''}
         </div>
       </div>`;
+  },
+
+  /* =====================================================================
+   * LEERFAHRTEN — Transporteur-Ansicht (einstellen + Bewerbungen)
+   * =================================================================== */
+  async driverEmptyRuns(body) {
+    // Draft für das Leerfahrt-Formular zurücksetzen, wenn frisch geöffnet
+    if (!this.state.erDraft) this.state.erDraft = { pickup: null, dropoff: null, route: null };
+    body.innerHTML = `
+      <div class="grid grid-2-wide">
+        <div class="card">
+          <div class="card-head"><h2>Leerfahrt einstellen</h2></div>
+          <div class="card-pad">
+            <div class="notice-neutral" style="margin-bottom:16px">Biete freie Plätze auf einer ohnehin geplanten Fahrt an. Für Leerfahrten gilt keine 65-km-Grenze. Pferdebesitzer können sich anschließend auf deine Leerfahrt bewerben.</div>
+            ${addrField('pickup', 'Startort', this.state.erDraft.pickup?.label || '', 'Von wo startest du?')}
+            ${addrField('dropoff', 'Zielort', this.state.erDraft.dropoff?.label || '', 'Wohin fährst du?')}
+            <label class="field"><span>Wann?</span><input type="datetime-local" id="when" value="${defaultWhen()}"></label>
+            <div class="field-row">
+              <div>
+                <label class="field" style="margin-bottom:8px"><span>Freie Plätze (Pferde)</span></label>
+                ${stepperField('erSeats', 1, 1, 8)}
+              </div>
+              <div>
+                <label class="field"><span>Preis (optional)</span><input type="number" id="erPrice" placeholder="z. B. 80" min="0" step="1"></label>
+              </div>
+            </div>
+            <label class="field"><span>Preis-Hinweis (optional)</span><input type="text" id="erPriceNote" placeholder="z. B. pro Pferd / Gesamt / Verhandlungsbasis"></label>
+            <label class="field"><span>Notiz (optional)</span><textarea id="erNote" placeholder="z. B. nur kleine Ponys, Abfahrt flexibel ±1 h" style="min-height:70px"></textarea></label>
+            <button class="btn btn-primary btn-block" id="submitReq" style="margin-top:16px" disabled>${ICON.send()} Route wählen, dann einstellen</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Streckenvorschau</h3><span class="badge badge-gray" id="kmBadge">Keine Route</span></div>
+          <div class="card-pad">
+            <div class="map" id="routeMap"></div>
+            <div class="route-stat" id="routeStat" style="display:none">
+              <div><div class="rs-num" id="rsKm">–</div><div class="rs-lbl">Strecke</div></div>
+              <div><div class="rs-num" id="rsMin">–</div><div class="rs-lbl">Fahrzeit</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="section-label" style="margin-top:26px">Meine Leerfahrten</div>
+      <div class="list" id="erList">${skeletonList(1)}</div>`;
+
+    // Formular nutzt denselben Draft-Mechanismus wie das Anfrageformular
+    this.state.draft = this.state.erDraft;
+    this.initMap('routeMap');
+    this.wireAddrField('pickup');
+    this.wireAddrField('dropoff');
+    this.wireStepper('erSeats');
+    if (this.state.draft.pickup && this.state.draft.dropoff && this.state.draft.route) this.updateRoutePreview();
+
+    document.getElementById('submitReq').addEventListener('click', async () => {
+      const btn = document.getElementById('submitReq');
+      const d = this.state.draft;
+      if (!d.pickup || !d.dropoff) { toast('Bitte Start und Ziel wählen', 'err'); return; }
+      btn.disabled = true; btn.innerHTML = 'Stelle ein…';
+      try {
+        await API.createEmptyRun({
+          driverId: this.state.driverId,
+          from: d.pickup, to: d.dropoff,
+          when: new Date(val('when')).getTime(),
+          seats: +val('erSeats'),
+          price: val('erPrice'),
+          priceNote: val('erPriceNote'),
+          note: val('erNote'),
+          route: d.route,
+        });
+        this.state.erDraft = { pickup: null, dropoff: null, route: null };
+        toast('Leerfahrt eingestellt', 'ok');
+        this.renderDriver();
+      } catch (e) {
+        toast(e.message, 'err');
+        btn.disabled = false; btn.innerHTML = `${ICON.send()} Leerfahrt einstellen`;
+      }
+    });
+
+    // Eigene Leerfahrten + Bewerbungen laden
+    const runs = await API.listEmptyRunsForDriver(this.state.driverId);
+    const list = document.getElementById('erList');
+    if (!list) return;
+    if (!runs.length) {
+      list.innerHTML = emptyState(ICON.truck(), 'Noch keine Leerfahrten', 'Stelle oben deine erste Leerfahrt ein.');
+      return;
+    }
+    const blocks = await Promise.all(runs.map((r) => this.driverEmptyRunBlock(r)));
+    if (!document.getElementById('erList')) return;
+    list.innerHTML = blocks.join('');
+    requestAnimationFrame(() => {
+      runs.forEach((r) => {
+        if (!document.getElementById('ermap-' + r.id)) return;
+        const line = r.routeLine && r.routeLine.length > 1 ? r.routeLine : [[r.from.lat, r.from.lng], [r.to.lat, r.to.lng]];
+        this.drawRoute('ermap-' + r.id, r.from, r.to, line);
+      });
+    });
+    this.wireDriverEmptyRunButtons();
+  },
+
+  async driverEmptyRunBlock(run) {
+    const apps = await API.listApplicationsForRun(run.id);
+    const pending = apps.filter((a) => a.status === 'pending');
+    const acceptedList = apps.filter((a) => a.status === 'accepted');
+    const statusBadge = {
+      open: `<span class="badge badge-accent badge-dot">Offen</span>`,
+      assigned: `<span class="badge badge-green badge-dot">Vergeben</span>`,
+      done: `<span class="badge badge-gray">Abgeschlossen</span>`,
+      cancelled: `<span class="badge badge-gray">Abgesagt</span>`,
+    }[run.status] || '';
+    const priceHtml = run.price != null ? `${money(run.price)}${run.priceNote ? ' · ' + esc(run.priceNote) : ''}` : (run.priceNote ? esc(run.priceNote) : 'Preis auf Anfrage');
+
+    // Belegte Plätze = Summe der Pferde aller angenommenen Bewerbungen.
+    const usedSeats = acceptedList.reduce((n, a) => n + (a.horseCount || 1), 0);
+    const seatsInfo = `${usedSeats}/${run.seats} ${run.seats === 1 ? 'Platz' : 'Plätze'} belegt`;
+
+    let inner = '';
+
+    // 1) Bereits angenommene Fahrten — jede mit eigenem Lebenszyklus
+    if (acceptedList.length) {
+      inner += `<div class="section-label" style="margin-top:18px">Angenommene Fahrten (${acceptedList.length}) · ${seatsInfo}</div>`;
+      inner += acceptedList.map((a) => `
+        <div class="accepted-trip">
+          ${this.applicationCard(a, run, true)}
+          <div style="margin-top:12px">${this.appLifecyclePanel(a, 'driver')}</div>
+        </div>`).join('');
+    }
+
+    // 2) Offene Bewerbungen — annehmbar, solange die Leerfahrt offen ist
+    if (run.status === 'open') {
+      if (pending.length) {
+        inner += `<div class="section-label" style="margin-top:20px">Offene Bewerbungen (${pending.length})</div>
+          <div class="list">${pending.map((a) => this.applicationCard(a, run)).join('')}</div>
+          <div class="item-actions" style="margin-top:14px">
+            <button class="btn btn-secondary btn-sm" data-close-run="${run.id}">Restliche absagen & Leerfahrt schließen</button>
+          </div>`;
+      } else if (!acceptedList.length) {
+        inner += `<div class="hint" style="margin-top:16px">Noch keine Bewerbungen. Sobald sich ein Pferdebesitzer bewirbt, erscheint er hier.</div>
+          <div class="item-actions" style="margin-top:14px"><button class="btn btn-danger btn-sm" data-delete-run="${run.id}">Leerfahrt löschen</button></div>`;
+      } else {
+        // Angenommene Fahrten vorhanden, aber keine offenen Bewerbungen mehr:
+        // Fahrer kann die Leerfahrt dennoch aktiv schließen (keine neuen Bewerbungen).
+        inner += `<div class="item-actions" style="margin-top:16px">
+          <button class="btn btn-secondary btn-sm" data-close-run="${run.id}">Leerfahrt schließen (keine weiteren Bewerbungen)</button>
+        </div>`;
+      }
+    }
+
+    return `
+      <div class="item">
+        <div class="item-head">
+          <div style="flex:1">
+            <div class="route-line"><span class="dot a"></span>${esc(run.from.label)}<span class="arrow">→</span><span class="dot b"></span>${esc(run.to.label)}</div>
+            <div class="item-meta">
+              ${run.routeKm != null ? `<span class="mi">${ICON.route()}<b>${run.routeKm} km</b></span>` : ''}
+              <span class="mi">${ICON.clock()}${fmtDate(run.when)}</span>
+              <span class="mi">${ICON.truck()}${seatsInfo}</span>
+              <span class="mi">${ICON.wallet()}${priceHtml}</span>
+            </div>
+            ${run.note ? `<div class="meta" style="margin-top:6px">${esc(run.note)}</div>` : ''}
+          </div>
+          ${statusBadge}
+        </div>
+        <div class="map-sm" id="ermap-${run.id}" style="margin-top:16px"></div>
+        ${inner}
+      </div>`;
+  },
+
+  /** Bewerbungskarte (aus Sicht des Fahrers: mit Annehmen-Button). */
+  applicationCard(app, run, isAccepted = false) {
+    const r = app.rider || {};
+    const rating = app.adjustedRating ?? r.rating;
+    const ratingHtml = rating ? `${starsInline(Math.round(rating))} <b>${rating}</b>` : 'Neu, noch keine Bewertung';
+    const head = `
+      <div class="item-head">
+        <div class="profile-row">
+          <div class="avatar">${initials(r.name)}</div>
+          <div>
+            <div style="font-weight:600">${esc(r.name || 'Pferdebesitzer')}</div>
+            <button class="meta rating-link" data-ratings-rider="${app.riderId}" data-name="${esc(r.name || '')}">${ratingHtml} · Bewertungen ansehen</button>
+          </div>
+        </div>
+      </div>`;
+    const details = `
+      <div class="route-line" style="margin-top:12px"><span class="dot a"></span>${esc(app.pickup.label)}<span class="arrow">→</span><span class="dot b"></span>${esc(app.dropoff.label)}</div>
+      <div class="item-meta" style="margin-top:8px">
+        <span class="mi">${ICON.horse()}${app.horseCount} ${app.horseCount === 1 ? 'Pferd' : 'Pferde'}</span>
+        ${app.loadingHelp ? `<span class="mi">${ICON.hand()}Verladehilfe nötig</span>` : ''}
+      </div>
+      ${app.message ? `<div class="hint" style="margin-top:10px">„${esc(app.message)}"</div>` : ''}`;
+
+    if (!isAccepted && app.status === 'pending') {
+      return `<div class="item" style="box-shadow:none">${head}${details}
+        <div class="item-actions" style="margin-top:14px">
+          <button class="btn btn-success btn-sm" data-accept-app="${app.id}">Bewerbung annehmen</button>
+          <button class="btn btn-secondary btn-sm" data-reject-app="${app.id}">Ablehnen</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="item" style="box-shadow:none">${head}${details}</div>`;
+  },
+
+  wireDriverEmptyRunButtons() {
+    this.el.querySelectorAll('[data-accept-app]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = 'Nehme an…';
+        try { await API.acceptApplication(b.dataset.acceptApp); toast('Bewerbung angenommen', 'ok'); this.renderDriver(); }
+        catch (e) { toast(e.message, 'err'); this.renderDriver(); }
+      }));
+    this.el.querySelectorAll('[data-reject-app]').forEach((b) =>
+      b.addEventListener('click', async () => { await API.rejectApplication(b.dataset.rejectApp); toast('Bewerbung abgelehnt'); this.renderDriver(); }));
+    this.el.querySelectorAll('[data-close-run]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.confirmModal(
+          'Leerfahrt schließen?',
+          'Alle noch offenen Bewerbungen werden abgelehnt und die Leerfahrt nimmt keine neuen Bewerbungen mehr an. Bereits angenommene Fahrten bleiben bestehen.',
+          'Schließen & restliche absagen',
+          async () => {
+            try { await API.closeEmptyRun(b.dataset.closeRun); toast('Leerfahrt geschlossen', 'ok'); this.renderDriver(); }
+            catch (e) { toast(e.message, 'err'); this.renderDriver(); }
+          },
+        );
+      }));
+    this.el.querySelectorAll('[data-delete-run]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.confirmModal('Leerfahrt löschen?', 'Möchtest du diese Leerfahrt wirklich löschen?', 'Löschen', async () => {
+          try { await API.deleteEmptyRun(b.dataset.deleteRun); toast('Leerfahrt gelöscht', 'ok'); this.renderDriver(); }
+          catch (e) { toast(e.message, 'err'); this.renderDriver(); }
+        });
+      }));
+    this.wireAppLifecycleButtons(() => this.renderDriver(), 'driver');
+    this.wireRatingButtons();
+  },
+
+  /* =====================================================================
+   * LEERFAHRTEN — Reiter-Ansicht (stöbern + bewerben)
+   * =================================================================== */
+  async riderEmptyRuns(body) {
+    body.innerHTML = `
+      <div class="page-head" style="margin-bottom:16px">
+        <p>Transporteure bieten hier freie Plätze auf ohnehin geplanten Fahrten an. Bewirb dich mit deiner Teilstrecke — der Transporteur wählt aus.</p>
+      </div>
+      <div class="section-label">Meine Bewerbungen</div>
+      <div class="list" id="myAppList">${skeletonList(1)}</div>
+      <div class="section-label" style="margin-top:24px">Offene Leerfahrten</div>
+      <div class="list" id="openRunList">${skeletonList(2)}</div>`;
+
+    // Meine Bewerbungen
+    const myApps = await API.listApplicationsForRider(this.state.riderId);
+    const myList = document.getElementById('myAppList');
+    if (myList) {
+      const active = myApps.filter((a) => a.status !== 'rejected' || a.emptyRun);
+      if (!active.length) {
+        myList.innerHTML = `<div class="hint">Du hast dich noch auf keine Leerfahrt beworben.</div>`;
+      } else {
+        myList.innerHTML = myApps.map((a) => this.riderApplicationBlock(a)).join('');
+      }
+    }
+
+    // Offene Leerfahrten
+    const runs = await API.listOpenEmptyRuns();
+    const list = document.getElementById('openRunList');
+    if (!list) return;
+    // eigene Bewerbungen zuordnen (schon beworben?)
+    const appliedRunIds = new Set(myApps.map((a) => a.emptyRunId));
+    if (!runs.length) {
+      list.innerHTML = emptyState(ICON.truck(), 'Keine offenen Leerfahrten', 'Sobald ein Transporteur eine Leerfahrt einstellt, erscheint sie hier.');
+    } else {
+      list.innerHTML = runs.map((r) => this.openRunCard(r, appliedRunIds.has(r.id))).join('');
+      requestAnimationFrame(() => {
+        runs.forEach((r) => {
+          if (!document.getElementById('ormap-' + r.id)) return;
+          const line = r.routeLine && r.routeLine.length > 1 ? r.routeLine : [[r.from.lat, r.from.lng], [r.to.lat, r.to.lng]];
+          this.drawRoute('ormap-' + r.id, r.from, r.to, line);
+        });
+      });
+    }
+    this.wireRiderEmptyRunButtons();
+  },
+
+  openRunCard(run, alreadyApplied) {
+    const d = run.driver || {};
+    const rating = run.adjustedRating ?? d.rating;
+    const ratingHtml = rating ? `${starsInline(Math.round(rating))} <b>${rating}</b>` : 'Neu';
+    const providerName = d.providerType === 'commercial' && d.company?.name ? d.company.name : d.name;
+    const priceHtml = run.price != null ? `${money(run.price)}${run.priceNote ? ' · ' + esc(run.priceNote) : ''}` : (run.priceNote ? esc(run.priceNote) : 'Preis auf Anfrage');
+    return `
+      <div class="item">
+        <div class="item-head">
+          <div style="flex:1">
+            <div class="route-line"><span class="dot a"></span>${esc(run.from.label)}<span class="arrow">→</span><span class="dot b"></span>${esc(run.to.label)}</div>
+            <div class="item-meta">
+              ${run.routeKm != null ? `<span class="mi">${ICON.route()}<b>${run.routeKm} km</b></span>` : ''}
+              <span class="mi">${ICON.clock()}${fmtDate(run.when)}</span>
+              <span class="mi">${ICON.truck()}${run.seats} ${run.seats === 1 ? 'Platz' : 'Plätze'}</span>
+              <span class="mi">${ICON.wallet()}${priceHtml}</span>
+            </div>
+            <button class="meta rating-link" data-ratings-driver="${run.driverId}" data-name="${esc(d.name || '')}" style="margin-top:6px">${esc(providerName || 'Transporteur')} · ${ratingHtml} · Bewertungen</button>
+            ${run.note ? `<div class="meta" style="margin-top:6px">${esc(run.note)}</div>` : ''}
+          </div>
+        </div>
+        <div class="map-sm" id="ormap-${run.id}" style="margin-top:16px"></div>
+        <div class="item-actions" style="margin-top:14px">
+          ${alreadyApplied
+            ? `<span class="badge badge-accent">${ICON.check()} Bereits beworben</span>`
+            : `<button class="btn btn-success btn-sm" data-apply-run="${run.id}">Auf diese Leerfahrt bewerben</button>`}
+        </div>
+      </div>`;
+  },
+
+  riderApplicationBlock(app) {
+    const run = app.emptyRun;
+    const d = app.driver || {};
+    const statusLabel = {
+      pending: `<span class="badge badge-amber">Bewerbung läuft</span>`,
+      accepted: `<span class="badge badge-green badge-dot">Angenommen</span>`,
+      rejected: `<span class="badge badge-gray">Nicht ausgewählt</span>`,
+    }[app.status] || '';
+    if (!run) return `<div class="item" style="box-shadow:none"><div class="meta">Leerfahrt nicht mehr verfügbar.</div></div>`;
+    const providerName = d.providerType === 'commercial' && d.company?.name ? d.company.name : (d.name || 'Transporteur');
+    let lifecycle = '';
+    if (app.status === 'accepted') lifecycle = `<div style="margin-top:14px">${this.appLifecyclePanel(app, 'rider')}</div>`;
+    return `
+      <div class="item">
+        <div class="item-head">
+          <div style="flex:1">
+            <div class="route-line"><span class="dot a"></span>${esc(run.from.label)}<span class="arrow">→</span><span class="dot b"></span>${esc(run.to.label)}</div>
+            <div class="item-meta">
+              <span class="mi">${ICON.clock()}${fmtDate(run.when)}</span>
+              <span class="mi">${ICON.truck()}${esc(providerName)}</span>
+              <span class="mi">${ICON.horse()}${app.horseCount} ${app.horseCount === 1 ? 'Pferd' : 'Pferde'}</span>
+            </div>
+          </div>
+          ${statusLabel}
+        </div>
+        ${app.status === 'pending' ? `<div class="item-actions" style="margin-top:12px"><button class="btn btn-secondary btn-sm" data-withdraw-app="${app.id}">Bewerbung zurückziehen</button></div>` : ''}
+        ${lifecycle}
+      </div>`;
+  },
+
+  wireRiderEmptyRunButtons() {
+    this.el.querySelectorAll('[data-apply-run]').forEach((b) =>
+      b.addEventListener('click', () => this.showApplyModal(b.dataset.applyRun)));
+    this.el.querySelectorAll('[data-withdraw-app]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try { await API.withdrawApplication(b.dataset.withdrawApp); toast('Bewerbung zurückgezogen', 'ok'); this.renderRider(); }
+        catch (e) { toast(e.message, 'err'); this.renderRider(); }
+      }));
+    this.wireAppLifecycleButtons(() => this.renderRider(), 'rider');
+    this.wireRatingButtons();
+  },
+
+  /** Bewerbungs-Modal: Reiter gibt seine Teilstrecke + Details an. */
+  showApplyModal(runId) {
+    // eigener Draft für die Bewerbung (nutzt dieselben Feld-IDs wie das Formular)
+    this.state.applyDraft = { pickup: null, dropoff: null, route: null };
+    const m = document.createElement('div'); m.className = 'modal-bg';
+    m.innerHTML = `<div class="modal"><div class="card-head"><h3>Auf Leerfahrt bewerben</h3><button class="btn-reset" data-close>Schließen</button></div><div class="card-pad">
+      <div class="notice-neutral" style="margin-bottom:14px">Gib an, von wo bis wo dein Pferd transportiert werden soll. Deine Teilstrecke kann innerhalb der Leerfahrt-Route liegen.</div>
+      ${addrField('applyPickup', 'Abholadresse', '', 'Wo soll das Pferd abgeholt werden?')}
+      ${addrField('applyDropoff', 'Zieladresse', '', 'Wohin soll das Pferd?')}
+      <div class="field-row">
+        <div>
+          <label class="field" style="margin-bottom:8px"><span>Anzahl Pferde</span></label>
+          ${stepperField('applyHorses', 1, 1, 8)}
+        </div>
+        <div>
+          <label class="field"><span>&nbsp;</span></label>
+          <div class="switch-row" style="padding:0;height:40px;align-items:center">
+            <div><div class="switch-label">Verladehilfe nötig</div></div>
+            <label class="switch"><input type="checkbox" id="applyLoad"><span class="track"></span></label>
+          </div>
+        </div>
+      </div>
+      <label class="field"><span>Nachricht (optional)</span><textarea id="applyMsg" placeholder="z. B. ruhiges Pferd, flexibel bei der Uhrzeit" style="min-height:70px"></textarea></label>
+      <button class="btn btn-primary btn-block" id="applySubmit" style="margin-top:8px">Bewerbung absenden</button>
+    </div></div>`;
+    m.addEventListener('click', (e) => { if (e.target === m || e.target.hasAttribute('data-close')) m.remove(); });
+    document.body.appendChild(m);
+
+    // Adressfelder im Modal verdrahten (eigener Draft)
+    this.wireApplyAddr('applyPickup', 'pickup');
+    this.wireApplyAddr('applyDropoff', 'dropoff');
+    this.wireStepper('applyHorses');
+
+    m.querySelector('#applySubmit').addEventListener('click', async () => {
+      const dr = this.state.applyDraft;
+      if (!dr.pickup || !dr.dropoff) { toast('Bitte Abhol- und Zieladresse wählen', 'err'); return; }
+      const btn = m.querySelector('#applySubmit'); btn.disabled = true; btn.textContent = 'Sende…';
+      try {
+        await API.applyToEmptyRun({
+          emptyRunId: runId, riderId: this.state.riderId,
+          pickup: dr.pickup, dropoff: dr.dropoff,
+          horseCount: +val('applyHorses'),
+          loadingHelp: document.getElementById('applyLoad').checked,
+          message: val('applyMsg'),
+        });
+        m.remove(); toast('Bewerbung gesendet', 'ok'); this.renderRider();
+      } catch (e) { toast(e.message, 'err'); btn.disabled = false; btn.textContent = 'Bewerbung absenden'; }
+    });
+  },
+
+  /** Vereinfachte Adressfeld-Verdrahtung für das Bewerbungs-Modal. */
+  wireApplyAddr(fieldId, key) {
+    const input = document.getElementById('addr-' + fieldId);
+    const results = document.getElementById('addrres-' + fieldId);
+    if (!input || !results) return;
+    let timer = null, items = [];
+    const close = () => { results.innerHTML = ''; results.style.display = 'none'; };
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      this.state.applyDraft[key] = null;
+      if (q.length < 3) { close(); return; }
+      results.style.display = 'block';
+      results.innerHTML = '<div class="addr-loading">Suche…</div>';
+      timer = setTimeout(async () => {
+        try {
+          items = await API.GeoService.search(q, null);
+          if (!items.length) { results.innerHTML = '<div class="addr-loading">Keine Treffer</div>'; return; }
+          results.innerHTML = items.map((it, i) => {
+            const parts = it.label.split(',');
+            return `<div class="addr-item" data-i="${i}"><div class="addr-main">${esc(parts[0])}</div><div class="addr-sub">${esc(parts.slice(1, 4).join(',').trim())}</div></div>`;
+          }).join('');
+          results.querySelectorAll('.addr-item').forEach((el) =>
+            el.addEventListener('click', () => {
+              const it = items[+el.dataset.i];
+              input.value = it.shortLabel || it.label;
+              this.state.applyDraft[key] = { label: it.shortLabel || it.label, lat: it.lat, lng: it.lng };
+              close();
+            }));
+        } catch (e) { results.innerHTML = '<div class="addr-loading">Suche nicht erreichbar</div>'; }
+      }, 400);
+    });
+    input.addEventListener('blur', () => setTimeout(close, 180));
   },
 
   wireDriverOfferButtons() {
@@ -1458,17 +2209,19 @@ const App = {
       <div class="card" style="margin-top:20px">
         <div class="card-head"><h2>Selbstauskunft</h2><span class="badge badge-amber">Pflicht</span></div>
         <div class="card-pad">
-          <div class="notice-neutral" style="margin-bottom:16px">Statt Dokumente hochzuladen, bestätigen Sie hier die für Ihre Transporte relevanten Punkte. Ihre Angaben werden nicht auf ihre rechtliche Gültigkeit geprüft — Sie haften für ihre Richtigkeit. Für ein aktives Transporteur-Profil müssen mindestens Fahrerlaubnis und Fahrzeugsicherheit bestätigt sein.</div>
+          <div class="notice-neutral" style="margin-bottom:16px">Bestätigen Sie hier die für Ihre Transporte relevanten Punkte. Ihre Angaben werden nicht auf ihre rechtliche Gültigkeit geprüft — Sie haften für ihre Richtigkeit. Für ein aktives Transporteur-Profil müssen mindestens Fahrerlaubnis und Fahrzeugsicherheit bestätigt sein.</div>
           ${declRow('declLicense', 'Ich bestätige, dass ich eine gültige Fahrerlaubnis für dieses Gespann besitze. *', d.declarations?.license)}
           ${declRow('declVehicle', 'Ich bestätige, dass Fahrzeug und Anhänger verkehrssicher sind. *', d.declarations?.vehicle)}
           ${declRow('declEu1_2005', 'Ich bestätige, dass die erforderlichen Nachweise nach der EU-Tiertransportverordnung (EG) Nr. 1/2005 vorliegen, soweit diese für meine Transporte einschlägig ist.', d.declarations?.eu1_2005)}
           ${declRow('declTrailerInsurance', 'Ich bestätige, dass eine Anhänger-Haftpflichtversicherung besteht.', d.declarations?.trailerInsurance)}
         </div>
       </div>
-      <div style="margin-top:22px"><button class="btn btn-primary" id="saveDriver">Änderungen speichern</button></div>`;
+      <div style="margin-top:22px"><button class="btn btn-primary" id="saveDriver">Änderungen speichern</button></div>
+      ${dangerZone()}`;
 
     this.state.draft._dloc = d.location && d.location.lat != null ? { ...d.location } : null;
     this.wireAddrFieldSimple('dloc', (loc) => { this.state.draft._dloc = loc; });
+    this.wireDeleteAccount();
     const recalc = () => { document.getElementById('exCalc').textContent = money((+val('pBase') || 0) + 30 * (+val('pKm') || 0)); };
     ['pKm', 'pBase'].forEach((id) => document.getElementById(id).addEventListener('input', recalc));
     body.querySelectorAll('[data-day]').forEach((btn) => btn.addEventListener('click', () => btn.classList.toggle('on')));
@@ -1547,12 +2300,26 @@ function formatCancelRule(offer) {
 }
 function cancelPolicyField(id,label,value){ const opts=[['free','Kostenfrei'],['base_fee','Anfahrtspauschale'],['custom','Individuelle Regel']]; return `<label class="field"><span>${label}</span><select id="cancel_${id}">${opts.map(([v,l])=>`<option value="${v}" ${v===value?'selected':''}>${l}</option>`).join('')}</select></label>`; }
 
+// Gemeinsame Absage-Kategorien (fuer Absage-Modal UND Anzeige beim Gegenueber)
+const CANCEL_CATEGORIES = [['horse','Pferd krank oder verletzt'],['schedule','Terminänderung'],['not_needed','Transport nicht mehr erforderlich'],['vehicle','Fahrzeug oder Anhänger nicht verfügbar'],['safety','Sicherheitsbedenken'],['emergency','Persönlicher Notfall'],['not_arrived','Nicht erschienen'],['mutual','Einvernehmliche Absage'],['other','Sonstiger Grund']];
+function cancelCategoryLabel(code){ const f = CANCEL_CATEGORIES.find(([v])=>v===code); return f ? f[1] : 'Sonstiger Grund'; }
+
 function val(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function initials(name) { return (name || '?').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?'; }
 function money(n) { return Number(n).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }); }
 function fmtDate(ts) { return new Date(ts).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
 function defaultWhen() { const d = new Date(Date.now() + 3 * 3600e3); d.setMinutes(0); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+function toLocalInput(ts) { const d = new Date(ts); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+function dangerZone() {
+  return `<div class="card danger-zone" style="margin-top:20px">
+    <div class="card-head"><h2>Konto löschen</h2></div>
+    <div class="card-pad">
+      <p style="margin:0 0 14px;font-size:13.5px;color:var(--ink-3);line-height:1.55">Dein Konto und alle zugehörigen Daten werden dauerhaft entfernt. Solange noch eine Fahrt läuft, muss diese zuerst beendet oder abgesagt werden.</p>
+      <button class="btn btn-danger" id="deleteAccount">Konto endgültig löschen</button>
+    </div>
+  </div>`;
+}
 function starsInline(n) { return `<span class="stars-display">${Array.from({ length: 5 }).map((_, i) => ICON.star(i < n)).join('')}</span>`; }
 function paymentList(p) {
   if (!p) return [];
@@ -1588,11 +2355,12 @@ function stepperField(id, value, min, max) {
 function declRow(id, label, checked) {
   return `<label class="decl-row"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}><span>${label}</span></label>`;
 }
-function ratingWidget(offerId) {
+function ratingWidget(id, kind = 'offer') {
+  const attr = kind === 'app' ? 'data-app-rate' : 'data-rate';
   return `<div class="rating-widget" data-stars="0">
     <div class="star-picker">${[1, 2, 3, 4, 5].map((i) => `<span class="star-pick" data-star="${i}">${ICON.star(true)}</span>`).join('')}</div>
     <textarea placeholder="Kommentar (optional)"></textarea>
-    <button class="btn btn-success btn-sm" data-rate="${offerId}" style="margin-top:10px">Bewertung abschicken</button>
+    <button class="btn btn-success btn-sm" ${attr}="${id}" style="margin-top:10px">Bewertung abschicken</button>
   </div>`;
 }
 function toast(msg, kind = '') {

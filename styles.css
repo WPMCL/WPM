@@ -539,6 +539,22 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .field.required input:focus,.field.required select:focus,.field.required textarea:focus{border-color:var(--accent)}
 
 /* =====================================================================
+   ZWEISTUFIGE ABSAGE — Antrag / Bestätigung
+   ===================================================================== */
+.cancelreq { border-radius: var(--radius); padding: 16px; margin-top: 4px; border: 1px solid; }
+/* Eingehender Antrag (ich muss bestätigen): auffällig in Rot-Ton */
+.cancelreq-incoming { background: var(--red-soft); border-color: #F0C2C2; }
+/* Mein eigener Antrag (warte auf Gegenseite): ruhiger, neutral/amber */
+.cancelreq-mine { background: var(--amber-soft); border-color: #F0DEC2; }
+.cancelreq-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; margin-bottom: 8px; }
+.cancelreq-incoming .cancelreq-head { color: var(--red); }
+.cancelreq-mine .cancelreq-head { color: var(--amber); }
+.cancelreq-head .ic { width: 18px; height: 18px; flex-shrink: 0; }
+.cancelreq-lead { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin-bottom: 12px; }
+.cancelreq-meta { font-size: 13.5px; color: var(--ink); }
+.cancelreq-reason { margin-top: 6px; font-size: 14px; font-style: italic; color: var(--ink-2); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+
+/* =====================================================================
    ROLLEN-KENNUNG — visuelle Unterscheidung Reiter vs. Transporteur
    ---------------------------------------------------------------------
    Reiter (role-rider):   heller/weißer Hintergrund, Indigo-Akzent.
@@ -643,3 +659,11 @@ body.role-driver .avatar { background: rgba(79,176,245,.18); color: #9FD2F8; }
    nur der Rahmen wird an die dunkle Linie angepasst */
 body.role-driver .map,
 body.role-driver .map-sm { border-color: var(--line-2); }
+
+/* Absage-Blöcke behalten ihren hellen Warnhintergrund (rot/amber).
+   Deshalb hier bewusst DUNKLE Textfarben erzwingen, damit sie auf dem
+   hellen Block lesbar bleiben (die globalen --ink-* sind im Fahrer-Modus
+   hell und würden sonst verschwinden). */
+body.role-driver .cancelreq-lead { color: #4A4A55; }
+body.role-driver .cancelreq-meta { color: #1E1E28; }
+body.role-driver .cancelreq-reason { color: #333; background: #fff; border-color: #E3D3D3; }

@@ -184,6 +184,14 @@ create table if not exists public.offers (
   cancellation_reason text,
   cancellation_mutual boolean not null default false,
 
+  -- Zweistufige Absage (Absage beantragen -> Gegenseite bestaetigt).
+  -- cancel_requested_by ist NULL, solange kein Antrag offen ist.
+  cancel_requested_by text,          -- 'rider' | 'driver' | null
+  cancel_requested_at timestamptz,
+  cancel_request_category text,
+  cancel_request_reason text,
+  cancel_confirm_comment text,       -- Kommentar der bestaetigenden Seite
+
   rider_completed boolean not null default false,
   driver_completed boolean not null default false,
   completed_at timestamptz,
@@ -382,6 +390,39 @@ create policy "Dokumente lesbar fuer eingeloggte"
   on storage.objects for select
   to authenticated
   using (bucket_id = 'documents');
+
+-- ---------------------------------------------------------------------
+-- Konto-Loeschung durch den Nutzer selbst (RPC).
+-- Loescht das EIGENE Auth-Konto (alles Weitere cascadet), aber nur wenn
+-- keine laufende Fahrt besteht. Siehe supabase-migration-account-deletion.sql.
+-- ---------------------------------------------------------------------
+create or replace function public.delete_my_account()
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  uid uuid := auth.uid();
+  active_count integer;
+begin
+  if uid is null then
+    raise exception 'Nicht angemeldet';
+  end if;
+  select count(*) into active_count
+  from public.offers o
+  join public.requests r on r.id = o.request_id
+  where o.status = 'accepted'
+    and o.completed_at is null
+    and (o.driver_id = uid or r.rider_id = uid);
+  if active_count > 0 then
+    raise exception 'Es bestehen noch % laufende Fahrt(en). Bitte zuerst beenden oder absagen.', active_count;
+  end if;
+  delete from auth.users where id = uid;
+end;
+$$;
+revoke all on function public.delete_my_account() from public;
+grant execute on function public.delete_my_account() to authenticated;
 
 -- =====================================================================
 -- Fertig. Naechster Schritt: In der App js/config.js die Projekt-URL und

@@ -166,10 +166,56 @@ function rowToOffer(o) {
     cancellationReason: o.cancellation_reason || '',
     cancellationMutual: !!o.cancellation_mutual,
     cancelledBy: o.cancelled_by, cancelledAt: o.cancelled_at ? new Date(o.cancelled_at).getTime() : null,
+    // Zweistufige Absage
+    cancelRequestedBy: o.cancel_requested_by || null,
+    cancelRequestedAt: o.cancel_requested_at ? new Date(o.cancel_requested_at).getTime() : null,
+    cancelRequestCategory: o.cancel_request_category || null,
+    cancelRequestReason: o.cancel_request_reason || '',
+    cancelConfirmComment: o.cancel_confirm_comment || '',
     riderCompleted: o.rider_completed, driverCompleted: o.driver_completed,
     completedAt: o.completed_at ? new Date(o.completed_at).getTime() : null,
     ratingByRider: o.rating_by_rider_stars ? { stars: o.rating_by_rider_stars, comment: o.rating_by_rider_comment || '', at: new Date(o.rating_by_rider_at).getTime() } : null,
     ratingByDriver: o.rating_by_driver_stars ? { stars: o.rating_by_driver_stars, comment: o.rating_by_driver_comment || '', at: new Date(o.rating_by_driver_at).getTime() } : null,
+  };
+}
+
+function rowToEmptyRun(e) {
+  if (!e) return null;
+  return {
+    id: e.id, driverId: e.driver_id,
+    from: { label: e.from_label, lat: e.from_lat, lng: e.from_lng },
+    to: { label: e.to_label, lat: e.to_lat, lng: e.to_lng },
+    when: new Date(e.when_ts).getTime(),
+    seats: e.seats, price: e.price != null ? Number(e.price) : null, priceNote: e.price_note || '', note: e.note || '',
+    routeKm: e.route_km != null ? Number(e.route_km) : null, routeMinutes: e.route_minutes, routeLine: e.route_line,
+    status: e.status, acceptedApplicationId: e.accepted_application_id,
+    createdAt: new Date(e.created_at).getTime(),
+  };
+}
+function rowToApplication(a) {
+  if (!a) return null;
+  return {
+    id: a.id, emptyRunId: a.empty_run_id, riderId: a.rider_id,
+    pickup: { label: a.pickup_label, lat: a.pickup_lat, lng: a.pickup_lng },
+    dropoff: { label: a.dropoff_label, lat: a.dropoff_lat, lng: a.dropoff_lng },
+    horseCount: a.horse_count, loadingHelp: a.loading_help, message: a.message || '',
+    status: a.status,
+    acceptedAt: a.accepted_at ? new Date(a.accepted_at).getTime() : null,
+    cancelWindowMs: a.cancel_window_ms,
+    cancellationCategory: a.cancellation_category || null,
+    cancellationReason: a.cancellation_reason || '',
+    cancellationMutual: !!a.cancellation_mutual,
+    cancelledBy: a.cancelled_by, cancelledAt: a.cancelled_at ? new Date(a.cancelled_at).getTime() : null,
+    cancelRequestedBy: a.cancel_requested_by || null,
+    cancelRequestedAt: a.cancel_requested_at ? new Date(a.cancel_requested_at).getTime() : null,
+    cancelRequestCategory: a.cancel_request_category || null,
+    cancelRequestReason: a.cancel_request_reason || '',
+    cancelConfirmComment: a.cancel_confirm_comment || '',
+    riderCompleted: a.rider_completed, driverCompleted: a.driver_completed,
+    completedAt: a.completed_at ? new Date(a.completed_at).getTime() : null,
+    ratingByRider: a.rating_by_rider_stars ? { stars: a.rating_by_rider_stars, comment: a.rating_by_rider_comment || '', at: new Date(a.rating_by_rider_at).getTime() } : null,
+    ratingByDriver: a.rating_by_driver_stars ? { stars: a.rating_by_driver_stars, comment: a.rating_by_driver_comment || '', at: new Date(a.rating_by_driver_at).getTime() } : null,
+    createdAt: new Date(a.created_at).getTime(),
   };
 }
 
@@ -199,6 +245,41 @@ const API = {
     return data.user || null;
   },
   onAuthChange(cb) { sb.auth.onAuthStateChange((_e, session) => cb(session?.user || null)); },
+
+  /**
+   * Zaehlt laufende Fahrten des aktuellen Nutzers: angenommenes Angebot
+   * (status 'accepted'), noch nicht abgeschlossen (completed_at null) —
+   * egal ob als Fahrer oder als Reiter (ueber die eigene Anfrage).
+   * Dient der UI-Vorabpruefung vor der Konto-Loeschung.
+   */
+  async activeTripsCount() {
+    const u = await this.currentUser();
+    if (!u) return 0;
+    // Als Fahrer: eigene angenommene, offene Angebote
+    const { data: asDriver } = await sb.from('offers')
+      .select('id').eq('driver_id', u.id).eq('status', 'accepted').is('completed_at', null);
+    // Als Reiter: angenommene, offene Angebote auf eigene Anfragen
+    const { data: myReqs } = await sb.from('requests').select('id').eq('rider_id', u.id);
+    let asRider = [];
+    if (myReqs && myReqs.length) {
+      const ids = myReqs.map((r) => r.id);
+      const { data } = await sb.from('offers')
+        .select('id').in('request_id', ids).eq('status', 'accepted').is('completed_at', null);
+      asRider = data || [];
+    }
+    return (asDriver?.length || 0) + (asRider?.length || 0);
+  },
+
+  /**
+   * Loescht das eigene Konto endgueltig (per RPC in der Datenbank).
+   * Die Datenbank prueft zusaetzlich, dass keine laufende Fahrt besteht.
+   * Danach wird die Sitzung beendet.
+   */
+  async deleteAccount() {
+    const { error } = await sb.rpc('delete_my_account');
+    if (error) throw new Error(error.message);
+    await sb.auth.signOut();
+  },
 
   /* ==== PROFIL ==== */
   async getMyProfile() {
@@ -302,6 +383,298 @@ const API = {
     if (error) throw new Error(error.message);
     return rowToRequest(data);
   },
+
+  /**
+   * Bestehende Anfrage bearbeiten — nur erlaubt, solange sie offen ist
+   * und noch KEIN Angebot vorliegt. Sobald ein Transporteur ein Angebot
+   * abgegeben hat, ist die Anfrage gesperrt (sonst wuerden Angebote auf
+   * veraltete Eckdaten verweisen).
+   */
+  async updateRequest(requestId, { pickup, dropoff, when, urgent, horseCount, loadingHelp, route }) {
+    const existing = await this.getRequest(requestId);
+    if (!existing) throw new Error('Anfrage nicht gefunden');
+    if (existing.status !== 'open') throw new Error('Diese Anfrage kann nicht mehr bearbeitet werden.');
+    const offers = await this.listOffersForRequest(requestId);
+    if (offers.length > 0) throw new Error('Es liegt bereits ein Angebot vor — die Anfrage kann nicht mehr bearbeitet werden.');
+    const routeKm = route && route.km ? route.km : Math.round(Geo.routeKm(pickup, dropoff) * 10) / 10;
+    const row = {
+      pickup_label: pickup.label, pickup_lat: pickup.lat, pickup_lng: pickup.lng,
+      dropoff_label: dropoff.label, dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
+      when_ts: new Date(when).toISOString(),
+      urgent: !!urgent, horse_count: Math.max(1, horseCount || 1), loading_help: !!loadingHelp,
+      route_km: routeKm, route_minutes: route?.minutes || null,
+      route_line: route?.line || [[pickup.lat, pickup.lng], [dropoff.lat, dropoff.lng]],
+    };
+    const { data, error } = await sb.from('requests').update(row).eq('id', requestId).select().single();
+    if (error) throw new Error(error.message);
+    return rowToRequest(data);
+  },
+
+  /**
+   * Anfrage loeschen — nur erlaubt, solange sie offen ist und noch kein
+   * Angebot vorliegt.
+   */
+  async deleteRequest(requestId) {
+    const existing = await this.getRequest(requestId);
+    if (!existing) throw new Error('Anfrage nicht gefunden');
+    if (existing.status !== 'open') throw new Error('Diese Anfrage kann nicht mehr gelöscht werden.');
+    const offers = await this.listOffersForRequest(requestId);
+    if (offers.length > 0) throw new Error('Es liegt bereits ein Angebot vor — die Anfrage kann nicht mehr gelöscht werden.');
+    const { error } = await sb.from('requests').delete().eq('id', requestId);
+    if (error) throw new Error(error.message);
+  },
+
+  /* ==== LEERFAHRTEN (empty runs) ==== */
+
+  /** Transporteur stellt eine Leerfahrt ein. KEINE km-Begrenzung. */
+  async createEmptyRun({ driverId, from, to, when, seats, price, priceNote, note, route }) {
+    const routeKm = route && route.km != null ? route.km : Math.round(Geo.routeKm(from, to) * 10) / 10;
+    const row = {
+      driver_id: driverId,
+      from_label: from.label, from_lat: from.lat, from_lng: from.lng,
+      to_label: to.label, to_lat: to.lat, to_lng: to.lng,
+      when_ts: new Date(when).toISOString(),
+      seats: Math.max(1, seats || 1),
+      price: (price === '' || price == null) ? null : Number(price),
+      price_note: priceNote || null,
+      note: note || null,
+      route_km: routeKm, route_minutes: route?.minutes || null,
+      route_line: route?.line || [[from.lat, from.lng], [to.lat, to.lng]],
+      status: 'open',
+    };
+    const { data, error } = await sb.from('empty_runs').insert(row).select().single();
+    if (error) throw new Error(error.message);
+    return rowToEmptyRun(data);
+  },
+
+  /** Offene, zukuenftige Leerfahrten (fuer Reiter zum Stoebern). */
+  async listOpenEmptyRuns() {
+    const { data, error } = await sb.from('empty_runs').select('*')
+      .eq('status', 'open').order('when_ts', { ascending: true });
+    if (error) throw new Error(error.message);
+    const runs = (data || []).map(rowToEmptyRun);
+    for (const r of runs) {
+      r.driver = await this.getDriver(r.driverId);
+      r.reliability = await this.getReliability(r.driverId, 'driver');
+      r.adjustedRating = this.computeAdjustedRating(r.driver?.rating, r.reliability);
+    }
+    return runs;
+  },
+
+  /** Leerfahrten eines Transporteurs (fuer seinen eigenen Tab). */
+  async listEmptyRunsForDriver(driverId) {
+    const { data, error } = await sb.from('empty_runs').select('*')
+      .eq('driver_id', driverId).order('when_ts', { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data || []).map(rowToEmptyRun);
+  },
+
+  async getEmptyRun(id) {
+    const { data, error } = await sb.from('empty_runs').select('*').eq('id', id).single();
+    if (error) return null;
+    return rowToEmptyRun(data);
+  },
+
+  /** Leerfahrt loeschen — nur solange offen und ohne angenommene Bewerbung. */
+  async deleteEmptyRun(runId) {
+    const run = await this.getEmptyRun(runId);
+    if (!run) throw new Error('Leerfahrt nicht gefunden');
+    if (run.status !== 'open') throw new Error('Diese Leerfahrt kann nicht mehr gelöscht werden.');
+    const { error } = await sb.from('empty_runs').delete().eq('id', runId);
+    if (error) throw new Error(error.message);
+  },
+
+  /** Reiter bewirbt sich auf eine Leerfahrt (mit eigener Teilstrecke). */
+  async applyToEmptyRun({ emptyRunId, riderId, pickup, dropoff, horseCount, loadingHelp, message }) {
+    const run = await this.getEmptyRun(emptyRunId);
+    if (!run) throw new Error('Leerfahrt nicht gefunden');
+    if (run.status !== 'open') throw new Error('Diese Leerfahrt nimmt keine Bewerbungen mehr an.');
+    const row = {
+      empty_run_id: emptyRunId, rider_id: riderId,
+      pickup_label: pickup.label, pickup_lat: pickup.lat, pickup_lng: pickup.lng,
+      dropoff_label: dropoff.label, dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
+      horse_count: Math.max(1, horseCount || 1), loading_help: !!loadingHelp,
+      message: message || null, status: 'pending',
+    };
+    const { data, error } = await sb.from('empty_run_applications').insert(row).select().single();
+    if (error) {
+      if (String(error.message).includes('duplicate') || error.code === '23505') {
+        throw new Error('Du hast dich auf diese Leerfahrt bereits beworben.');
+      }
+      throw new Error(error.message);
+    }
+    return rowToApplication(data);
+  },
+
+  /** Bewerbungen zu einer Leerfahrt (fuer den Fahrer). */
+  async listApplicationsForRun(emptyRunId) {
+    const { data, error } = await sb.from('empty_run_applications').select('*')
+      .eq('empty_run_id', emptyRunId).order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    const apps = (data || []).map(rowToApplication);
+    for (const a of apps) {
+      a.rider = await this.getRider(a.riderId);
+      a.reliability = await this.getReliability(a.riderId, 'rider');
+      a.adjustedRating = this.computeAdjustedRating(a.rider?.rating, a.reliability);
+    }
+    return apps;
+  },
+
+  /** Eigene Bewerbungen eines Reiters (fuer seinen Tab). */
+  async listApplicationsForRider(riderId) {
+    const { data, error } = await sb.from('empty_run_applications').select('*')
+      .eq('rider_id', riderId).order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    const apps = (data || []).map(rowToApplication);
+    for (const a of apps) {
+      a.emptyRun = await this.getEmptyRun(a.emptyRunId);
+      if (a.emptyRun) a.driver = await this.getDriver(a.emptyRun.driverId);
+    }
+    return apps;
+  },
+
+  async getApplication(id) {
+    const { data, error } = await sb.from('empty_run_applications').select('*').eq('id', id).single();
+    if (error) throw new Error(error.message);
+    return rowToApplication(data);
+  },
+
+  /** Reiter zieht seine (noch offene) Bewerbung zurueck. */
+  async withdrawApplication(applicationId) {
+    const app = await this.getApplication(applicationId);
+    if (!app) throw new Error('Bewerbung nicht gefunden');
+    if (app.status !== 'pending') throw new Error('Diese Bewerbung kann nicht mehr zurückgezogen werden.');
+    const { error } = await sb.from('empty_run_applications').delete().eq('id', applicationId);
+    if (error) throw new Error(error.message);
+  },
+
+  /** Transporteur nimmt eine Bewerbung an (analog acceptOffer). */
+  /**
+   * Transporteur nimmt eine Bewerbung an. Mehrfach-Modell: es koennen
+   * MEHRERE Bewerbungen angenommen werden (grosser Haenger, mehrere
+   * Pferde). Die Leerfahrt bleibt OFFEN fuer weitere Bewerbungen, bis der
+   * Fahrer sie aktiv schliesst ("Restliche absagen" -> closeEmptyRun).
+   * Es gibt bewusst KEIN hartes Platzlimit; seats dient nur als Hinweis.
+   */
+  async acceptApplication(applicationId) {
+    const { data: appRow, error: e1 } = await sb.from('empty_run_applications').select('*').eq('id', applicationId).single();
+    if (e1) throw new Error(e1.message);
+    const app = rowToApplication(appRow);
+    if (app.status !== 'pending') throw new Error('Diese Bewerbung ist nicht mehr offen.');
+    const { error: e2 } = await sb.from('empty_run_applications')
+      .update({ status: 'accepted', accepted_at: new Date().toISOString() }).eq('id', applicationId);
+    if (e2) throw new Error(e2.message);
+    // Leerfahrt bleibt offen — andere Bewerbungen NICHT automatisch ablehnen.
+    return { app };
+  },
+
+  /**
+   * "Restliche absagen": alle noch offenen (pending) Bewerbungen einer
+   * Leerfahrt ablehnen und die Leerfahrt schliessen. Gibt es mindestens
+   * eine angenommene Bewerbung, wird die Fahrt 'assigned', sonst
+   * 'cancelled' (niemand ausgewaehlt).
+   */
+  async closeEmptyRun(emptyRunId) {
+    await sb.from('empty_run_applications').update({ status: 'rejected' })
+      .eq('empty_run_id', emptyRunId).eq('status', 'pending');
+    const { data: acc } = await sb.from('empty_run_applications')
+      .select('id').eq('empty_run_id', emptyRunId).eq('status', 'accepted');
+    const hasAccepted = (acc || []).length > 0;
+    await sb.from('empty_runs').update({ status: hasAccepted ? 'assigned' : 'cancelled' }).eq('id', emptyRunId);
+  },
+
+  async rejectApplication(applicationId) {
+    const { error } = await sb.from('empty_run_applications').update({ status: 'rejected' }).eq('id', applicationId);
+    if (error) throw new Error(error.message);
+  },
+
+  /* ---- Lebenszyklus einer angenommenen Bewerbung (Absage/Abschluss) ---- */
+  // Spiegelt die offer-Funktionen, arbeitet aber auf empty_run_applications
+  // + empty_runs. cancelInfo() wird wiederverwendet (gleiche Feldnamen).
+
+  async _finalizeAppCancellation(app, { cancelledBy, category, reason, mutual, confirmComment }) {
+    const patch = {
+      status: 'rejected', cancelled_by: cancelledBy, cancelled_at: new Date().toISOString(),
+      cancellation_category: category, cancellation_reason: String(reason || '').trim(), cancellation_mutual: !!mutual,
+    };
+    if (confirmComment != null) patch.cancel_confirm_comment = String(confirmComment).trim();
+    await sb.from('empty_run_applications').update(patch).eq('id', app.id);
+    // Mehrfach-Modell: Die Leerfahrt-Status wird hier NICHT angefasst.
+    // Andere angenommene Fahrten derselben Leerfahrt laufen unabhaengig
+    // weiter. Ob die Leerfahrt noch offen ist, steuert allein der Fahrer
+    // ueber "Restliche absagen" (closeEmptyRun).
+  },
+
+  async cancelApplicationTrip(applicationId, by) {
+    const app = await this.getApplication(applicationId);
+    if (app.status !== 'accepted') throw new Error('Keine aktive Fahrt');
+    if (!this.cancelInfo(app).open) throw new Error('Nach den ersten 10 Minuten muss die Absage beantragt und von der anderen Seite bestätigt werden.');
+    await this._finalizeAppCancellation(app, { cancelledBy: by, category: 'grace_period', reason: '', mutual: false });
+  },
+
+  async requestAppCancellation(applicationId, by, category, reason) {
+    if (!category || !String(reason).trim()) throw new Error('Bitte Grund und Begründung angeben.');
+    const app = await this.getApplication(applicationId);
+    if (app.status !== 'accepted') throw new Error('Keine aktive Fahrt');
+    if (this.cancelInfo(app).open) throw new Error('Innerhalb der ersten 10 Minuten kann direkt abgesagt werden.');
+    if (app.cancelRequestedBy) throw new Error('Es liegt bereits ein Absage-Antrag vor.');
+    const { error } = await sb.from('empty_run_applications').update({
+      cancel_requested_by: by, cancel_requested_at: new Date().toISOString(),
+      cancel_request_category: category, cancel_request_reason: String(reason).trim(),
+    }).eq('id', applicationId);
+    if (error) throw new Error(error.message);
+  },
+
+  async withdrawAppCancellation(applicationId, by) {
+    const app = await this.getApplication(applicationId);
+    if (app.cancelRequestedBy !== by) throw new Error('Nur die beantragende Seite kann den Antrag zurückziehen.');
+    const { error } = await sb.from('empty_run_applications').update({
+      cancel_requested_by: null, cancel_requested_at: null, cancel_request_category: null, cancel_request_reason: null,
+    }).eq('id', applicationId);
+    if (error) throw new Error(error.message);
+  },
+
+  async confirmAppCancellation(applicationId, by, comment = '') {
+    const app = await this.getApplication(applicationId);
+    if (app.status !== 'accepted') throw new Error('Keine aktive Fahrt');
+    if (!app.cancelRequestedBy) throw new Error('Es liegt kein Absage-Antrag vor.');
+    if (app.cancelRequestedBy === by) throw new Error('Die Absage muss von der anderen Seite bestätigt werden.');
+    await this._finalizeAppCancellation(app, {
+      cancelledBy: app.cancelRequestedBy, category: app.cancelRequestCategory,
+      reason: app.cancelRequestReason, mutual: true, confirmComment: comment,
+    });
+  },
+
+  async confirmAppCompletion(applicationId, by) {
+    const app = await this.getApplication(applicationId);
+    if (app.status !== 'accepted') throw new Error('Keine aktive Fahrt');
+    if (this.cancelInfo(app).open) throw new Error('Abschluss erst nach Ablauf des Stornofensters möglich.');
+    if (app.cancelRequestedBy) throw new Error('Es liegt ein offener Absage-Antrag vor. Bitte zuerst klären.');
+    const patch = {};
+    if (by === 'rider') patch.rider_completed = true;
+    if (by === 'driver') patch.driver_completed = true;
+    const bothDone = (by === 'rider' ? true : app.riderCompleted) && (by === 'driver' ? true : app.driverCompleted);
+    if (bothDone) patch.completed_at = new Date().toISOString();
+    await sb.from('empty_run_applications').update(patch).eq('id', applicationId);
+    // Leerfahrt nur dann auf 'done', wenn ALLE angenommenen Fahrten dieser
+    // Leerfahrt abgeschlossen sind und keine Bewerbung mehr offen ist.
+    if (bothDone) {
+      const { data: rest } = await sb.from('empty_run_applications')
+        .select('id,status,completed_at').eq('empty_run_id', app.emptyRunId);
+      const anyOpen = (rest || []).some((a) =>
+        a.status === 'pending' || (a.status === 'accepted' && !a.completed_at && a.id !== applicationId));
+      if (!anyOpen) await sb.from('empty_runs').update({ status: 'done' }).eq('id', app.emptyRunId);
+    }
+  },
+
+  async rateAppTrip(applicationId, by, stars, comment) {
+    const patch = {};
+    if (by === 'rider') { patch.rating_by_rider_stars = stars; patch.rating_by_rider_comment = comment || null; patch.rating_by_rider_at = new Date().toISOString(); }
+    else { patch.rating_by_driver_stars = stars; patch.rating_by_driver_comment = comment || null; patch.rating_by_driver_at = new Date().toISOString(); }
+    const { error } = await sb.from('empty_run_applications').update(patch).eq('id', applicationId);
+    if (error) throw new Error(error.message);
+  },
+
   async listRequestsForRider(riderId) {
     const { data, error } = await sb.from('requests').select('*').eq('rider_id', riderId).order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
@@ -439,22 +812,109 @@ const API = {
     const remainingMs = Math.max(0, offer.cancelWindowMs - (Date.now() - offer.acceptedAt));
     return { open: remainingMs > 0, remainingMs };
   },
+  /**
+   * Innerhalb der ersten 10 Minuten (Kulanzfenster): Absage ist sofort
+   * wirksam, keine Zustimmung der Gegenseite noetig.
+   * Nach den 10 Minuten leitet diese Funktion NICHT mehr sofort ab,
+   * sondern verweist auf requestCancellation() (zweistufig).
+   */
   async cancelTrip(offerId, by, category = null, reason = '', mutual = false) {
     const { data: offerRow, error } = await sb.from('offers').select('*').eq('id', offerId).single();
     if (error) throw new Error(error.message);
     const offer = rowToOffer(offerRow);
     if (offer.status !== 'accepted') throw new Error('Keine aktive Fahrt');
     const info = this.cancelInfo(offer);
-    if (!info.open && (!category || !String(reason).trim())) throw new Error('Nach Ablauf der ersten 10 Minuten ist eine Begründung erforderlich.');
-    const patch = { status: 'rejected', cancelled_by: by, cancelled_at: new Date().toISOString(), cancellation_category: info.open ? 'grace_period' : category };
     if (!info.open) {
-      patch.cancellation_category = category;
-      patch.cancellation_reason = String(reason).trim();
-      patch.cancellation_mutual = !!mutual;
+      // Nach dem Kulanzfenster ist die Absage zweistufig.
+      throw new Error('Nach den ersten 10 Minuten muss die Absage beantragt und von der anderen Seite bestätigt werden.');
     }
-    await sb.from('offers').update(patch).eq('id', offerId);
+    // Kulanzfenster: sofortige Absage
+    await this._finalizeCancellation(offer, {
+      cancelledBy: by, category: 'grace_period', reason: '', mutual: false,
+    });
+  },
+
+  /**
+   * Interne Helferfunktion: fuehrt die eigentliche Absage aus
+   * (Angebot ablehnen, Anfrage wieder oeffnen, zurueckgestellte
+   * Mitbewerber reaktivieren). Wird vom Kulanzfenster UND von der
+   * bestaetigten zweistufigen Absage genutzt.
+   */
+  async _finalizeCancellation(offer, { cancelledBy, category, reason, mutual, confirmComment }) {
+    const patch = {
+      status: 'rejected',
+      cancelled_by: cancelledBy,
+      cancelled_at: new Date().toISOString(),
+      cancellation_category: category,
+      cancellation_reason: String(reason || '').trim(),
+      cancellation_mutual: !!mutual,
+    };
+    if (confirmComment != null) patch.cancel_confirm_comment = String(confirmComment).trim();
+    await sb.from('offers').update(patch).eq('id', offer.id);
     await sb.from('requests').update({ status: 'open', accepted_offer_id: null }).eq('id', offer.requestId);
     await sb.from('offers').update({ status: 'pending' }).eq('request_id', offer.requestId).eq('status', 'on_hold');
+  },
+
+  /**
+   * Schritt 1 der zweistufigen Absage: eine Seite BEANTRAGT die Absage.
+   * Die Fahrt bleibt aktiv (status = 'accepted'), wird aber markiert.
+   */
+  async requestCancellation(offerId, by, category, reason) {
+    if (!category || !String(reason).trim()) throw new Error('Bitte Grund und Begründung angeben.');
+    const { data: offerRow, error } = await sb.from('offers').select('*').eq('id', offerId).single();
+    if (error) throw new Error(error.message);
+    const offer = rowToOffer(offerRow);
+    if (offer.status !== 'accepted') throw new Error('Keine aktive Fahrt');
+    if (this.cancelInfo(offer).open) throw new Error('Innerhalb der ersten 10 Minuten kann direkt abgesagt werden.');
+    if (offer.cancelRequestedBy) throw new Error('Es liegt bereits ein Absage-Antrag vor.');
+    const { error: e2 } = await sb.from('offers').update({
+      cancel_requested_by: by,
+      cancel_requested_at: new Date().toISOString(),
+      cancel_request_category: category,
+      cancel_request_reason: String(reason).trim(),
+    }).eq('id', offerId);
+    if (e2) throw new Error(e2.message);
+  },
+
+  /**
+   * Der Antragsteller zieht seinen Absage-Antrag zurueck (solange die
+   * Gegenseite noch nicht bestaetigt hat). Die Fahrt laeuft normal weiter.
+   */
+  async withdrawCancellation(offerId, by) {
+    const { data: offerRow, error } = await sb.from('offers').select('*').eq('id', offerId).single();
+    if (error) throw new Error(error.message);
+    const offer = rowToOffer(offerRow);
+    if (offer.cancelRequestedBy !== by) throw new Error('Nur die beantragende Seite kann den Antrag zurückziehen.');
+    const { error: e2 } = await sb.from('offers').update({
+      cancel_requested_by: null,
+      cancel_requested_at: null,
+      cancel_request_category: null,
+      cancel_request_reason: null,
+    }).eq('id', offerId);
+    if (e2) throw new Error(e2.message);
+  },
+
+  /**
+   * Schritt 2 der zweistufigen Absage: die GEGENSEITE bestaetigt die
+   * beantragte Absage (optional mit Kommentar). Erst jetzt wird die
+   * Fahrt endgueltig abgesagt und gilt als einvernehmlich.
+   */
+  async confirmCancellation(offerId, by, comment = '') {
+    const { data: offerRow, error } = await sb.from('offers').select('*').eq('id', offerId).single();
+    if (error) throw new Error(error.message);
+    const offer = rowToOffer(offerRow);
+    if (offer.status !== 'accepted') throw new Error('Keine aktive Fahrt');
+    if (!offer.cancelRequestedBy) throw new Error('Es liegt kein Absage-Antrag vor.');
+    if (offer.cancelRequestedBy === by) throw new Error('Die Absage muss von der anderen Seite bestätigt werden.');
+    // Endgueltige Absage: Kategorie/Begruendung des Antragstellers uebernehmen,
+    // als einvernehmlich markieren. cancelled_by bleibt der Antragsteller.
+    await this._finalizeCancellation(offer, {
+      cancelledBy: offer.cancelRequestedBy,
+      category: offer.cancelRequestCategory,
+      reason: offer.cancelRequestReason,
+      mutual: true,
+      confirmComment: comment,
+    });
   },
 
   async confirmCompletion(offerId, by) {
@@ -463,6 +923,7 @@ const API = {
     const offer = rowToOffer(offerRow);
     if (offer.status !== 'accepted') throw new Error('Keine aktive Fahrt');
     if (this.cancelInfo(offer).open) throw new Error('Abschluss erst nach Ablauf des Stornofensters möglich.');
+    if (offer.cancelRequestedBy) throw new Error('Es liegt ein offener Absage-Antrag vor. Bitte zuerst klären.');
     // zurückgestellte Mitbewerber endgültig ablehnen
     await sb.from('offers').update({ status: 'rejected' }).eq('request_id', offer.requestId).eq('status', 'on_hold');
     const patch = {};
