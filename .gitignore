@@ -1,6 +1,0 @@
-# Lokale Test- und Systemdateien
-node_modules/
-*.log
-.DS_Store
-supamock.js
-t*.js
