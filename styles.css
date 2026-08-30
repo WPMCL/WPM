@@ -1,10 +1,7 @@
 /* =====================================================================
    Werpfährtmich? — Designsystem
-   Clean, professional, Silicon-Valley-Startup. Keine Emojis, keine
-   verspielten Farben. Ein präziser Akzent (Indigo), viel Weißraum.
+   Clean, professional. Trebuchet MS, eckige Kanten, präziser Akzent.
    ===================================================================== */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
   --ink: #0F1115; --ink-2: #3D424D; --ink-3: #6B7280; --ink-4: #9CA3AF;
@@ -15,21 +12,22 @@
   --amber: #B45309; --amber-soft: #FBF0E1;
   --red: #B91C1C; --red-soft: #FBEBEB;
   --line: #E5E7EB; --line-2: #D1D5DB;
-  --radius: 8px; --radius-lg: 12px;
+  --radius: 0px; --radius-lg: 0px;
   --shadow-sm: 0 1px 2px rgba(16,17,21,.04), 0 1px 3px rgba(16,17,21,.06);
   --shadow: 0 2px 4px rgba(16,17,21,.04), 0 4px 16px rgba(16,17,21,.06);
   --shadow-lg: 0 8px 24px rgba(16,17,21,.10), 0 2px 6px rgba(16,17,21,.06);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; -webkit-font-smoothing: antialiased; letter-spacing: -0.01em; }
+body { font-family: 'Trebuchet MS', 'Segoe UI', Tahoma, Verdana, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; -webkit-font-smoothing: antialiased; letter-spacing: -0.01em; }
 h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color: var(--ink); }
 
 .topbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 20px; padding: 0 28px; height: 60px; background: rgba(255,255,255,.85); backdrop-filter: saturate(180%) blur(12px); border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; letter-spacing: -0.03em; }
-.brand .mark { width: 42px; height: 33px; border-radius: 7px; background: transparent; display: grid; place-items: center; flex-shrink: 0; overflow: hidden; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; letter-spacing: -0.03em; cursor: pointer; user-select: none; }
+.brand:hover { opacity: .8; }
+.brand .mark { width: 42px; height: 33px; border-radius: 0; background: transparent; display: grid; place-items: center; flex-shrink: 0; overflow: hidden; }
 .brand .mark svg, .brand .mark img { width: 100%; height: 100%; object-fit: contain; }
 .role-switch { margin-left: auto; display: flex; background: var(--bg-2); border-radius: var(--radius); padding: 3px; gap: 2px; }
-.role-switch button { border: 0; background: transparent; cursor: pointer; font: inherit; font-weight: 500; font-size: 13.5px; color: var(--ink-3); padding: 7px 16px; border-radius: 6px; transition: all .15s; }
+.role-switch button { border: 0; background: transparent; cursor: pointer; font: inherit; font-weight: 500; font-size: 13.5px; color: var(--ink-3); padding: 7px 16px; border-radius: 0; transition: all .15s; }
 .role-switch button.active { background: var(--paper); color: var(--ink); box-shadow: var(--shadow-sm); }
 .btn-reset { border: 1px solid var(--line-2); background: var(--paper); color: var(--ink-2); font: inherit; font-weight: 500; font-size: 13px; padding: 7px 14px; border-radius: var(--radius); cursor: pointer; transition: all .15s; }
 .btn-reset:hover { border-color: var(--ink-3); }
@@ -37,8 +35,23 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color:
 .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 28px 96px; }
 .page-head { margin-bottom: 28px; }
 .page-head .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
-.page-head h1 { font-size: 30px; }
+.page-head h1 { font-size: 34px; }
 .page-head p { color: var(--ink-3); max-width: 60ch; margin-top: 10px; font-size: 15px; }
+
+/* Aufruf-Block, der das Erstell-Formular per Button aufklappt
+   (Ride-Booking-Stil: große Überschrift + prominenter Button). */
+.create-cta {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  flex-wrap: wrap;
+  background: var(--paper); border: 1px solid var(--line);
+  padding: 28px; margin-bottom: 24px;
+}
+.create-cta h2 { font-size: 26px; letter-spacing: -0.02em; }
+.create-cta h2::after { content: ''; }
+.create-cta p { color: var(--ink-3); margin-top: 6px; font-size: 14.5px; max-width: 46ch; }
+.btn-lg { font-size: 15px; padding: 14px 24px; }
+.accent-text { color: var(--accent); }
+
 .grid { display: grid; gap: 20px; }
 .grid-2 { grid-template-columns: 1fr 1fr; }
 .grid-2-wide { grid-template-columns: 1.1fr 0.9fr; }
@@ -73,8 +86,8 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .switch-row .switch-sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
 .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 0; height: 0; }
-.switch .track { position: absolute; inset: 0; background: var(--line-2); border-radius: 999px; transition: background .2s; cursor: pointer; }
-.switch .track::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .2s; box-shadow: var(--shadow-sm); }
+.switch .track { position: absolute; inset: 0; background: var(--line-2); border-radius: 0; transition: background .2s; cursor: pointer; }
+.switch .track::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 0; transition: transform .2s; box-shadow: var(--shadow-sm); }
 .switch input:checked + .track { background: var(--accent); }
 .switch input:checked + .track::before { transform: translateX(18px); }
 
@@ -97,7 +110,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .btn-block { width: 100%; }
 .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 
-.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 6px; letter-spacing: -0.01em; }
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 0; letter-spacing: -0.01em; }
 .badge-accent { background: var(--accent-soft); color: var(--accent); }
 .badge-green { background: var(--green-soft); color: var(--green); }
 .badge-amber { background: var(--amber-soft); color: var(--amber); }
@@ -156,6 +169,9 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .hint { font-size: 13px; color: var(--ink-2); background: var(--bg-2); border-radius: var(--radius); padding: 12px 14px; line-height: 1.5; }
 .notice { font-size: 12.5px; color: var(--amber); background: var(--amber-soft); border: 1px solid #F0DEC2; border-radius: var(--radius); padding: 12px 14px; line-height: 1.5; }
 .notice-neutral { font-size: 12.5px; color: var(--ink-2); background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; line-height: 1.5; }
+/* Schlichter Hinweistext ohne Box (Hintergrund/Rahmen), für Formular-Erklärungen */
+.form-note { font-size: 13px; color: var(--ink-3); line-height: 1.5; margin-bottom: 16px; }
+.form-note b { color: var(--ink-2); font-weight: 600; }
 .filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 20px; }
 .filter-bar .fb-item { display: inline-flex; align-items: center; gap: 6px; }
 .filter-bar .fb-item svg { width: 15px; height: 15px; color: var(--ink-4); }
@@ -191,7 +207,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .empty .ico { width: 44px; height: 44px; margin: 0 auto 14px; color: var(--ink-4); }
 .empty h3 { font-size: 16px; margin-bottom: 6px; }
 .empty p { font-size: 14px; color: var(--ink-3); max-width: 40ch; margin: 0 auto; }
-.skeleton { background: linear-gradient(90deg, var(--bg-2) 25%, #eaecef 50%, var(--bg-2) 75%); background-size: 200% 100%; animation: sk 1.3s infinite; border-radius: 6px; }
+.skeleton { background: linear-gradient(90deg, var(--bg-2) 25%, #eaecef 50%, var(--bg-2) 75%); background-size: 200% 100%; animation: sk 1.3s infinite; border-radius: 0; }
 @keyframes sk { to { background-position: -200% 0; } }
 
 .toast-wrap { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9500; display: flex; flex-direction: column; gap: 10px; align-items: center; }
@@ -216,7 +232,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .safety-cell { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
 .safety-cell .sc-lbl { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 3px; }
 .safety-cell .sc-val { font-size: 14px; font-weight: 600; color: var(--ink); }
-.safety-cell .sc-val.plate { font-family: 'Inter', monospace; letter-spacing: 0.05em; background: #fff; }
+.safety-cell .sc-val.plate { font-family: 'Consolas', 'Courier New', monospace; letter-spacing: 0.05em; background: #fff; }
 
 /* ---- Bewertungs-Link & Review-Modal ---- */
 .rating-link { border: 0; background: transparent; font: inherit; font-size: 13px; color: var(--ink-3); cursor: pointer; padding: 2px 0; text-align: left; display: inline-flex; align-items: center; gap: 5px; transition: color .15s; }
@@ -233,7 +249,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 
 /* ---- Zahlungsarten ---- */
 .pay-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.pay-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; color: var(--ink-2); background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
+.pay-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; color: var(--ink-2); background: var(--bg-2); border: 1px solid var(--line); border-radius: 0; padding: 3px 8px; }
 .pay-badge svg { width: 13px; height: 13px; color: var(--ink-3); }
 .pay-picker { display: flex; gap: 10px; flex-wrap: wrap; }
 .pay-opt { display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 13.5px; font-weight: 500; color: var(--ink-2); background: var(--paper); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 10px 16px; cursor: pointer; transition: all .15s; }
@@ -248,7 +264,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .auth-wrap { min-height: calc(100vh - 60px); display: grid; place-items: center; padding: 40px 20px; }
 .auth-card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 36px; width: 100%; max-width: 420px; }
 .auth-head { text-align: center; margin-bottom: 24px; }
-.auth-logo { width: 128px; height: 101px; border-radius: 14px; overflow: hidden; margin: 0 auto 14px; box-shadow: var(--shadow-sm); }
+.auth-logo { width: 128px; height: 101px; border-radius: 0; overflow: hidden; margin: 0 auto 14px; box-shadow: var(--shadow-sm); }
 .auth-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .auth-brand { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; color: var(--accent); }
 .auth-slogan { font-size: 13px; color: var(--ink-3); margin-top: 2px; }
@@ -413,7 +429,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 /* Hero mit hellblauem Verlauf */
 .hero { background: linear-gradient(160deg, var(--sky) 0%, var(--sky-dk) 100%); color: #fff; text-align: center; padding: 72px 28px 80px; }
 .hero-inner { max-width: 760px; margin: 0 auto; }
-.hero-logo { width: 132px; height: 104px; margin: 0 auto 28px; border-radius: 18px; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,.18); }
+.hero-logo { width: 132px; height: 104px; margin: 0 auto 28px; border-radius: 0; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,.18); }
 .hero-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hero h1 { color: #fff; font-size: 44px; line-height: 1.08; letter-spacing: -0.03em; margin-bottom: 20px; }
 .hero-sub { font-size: 17px; line-height: 1.6; color: rgba(255,255,255,.92); max-width: 620px; margin: 0 auto 32px; }
@@ -443,7 +459,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 /* Vorteile */
 .feat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; max-width: 860px; margin: 0 auto; }
 .feat { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 26px; box-shadow: var(--shadow-sm); }
-.feat-ico { width: 44px; height: 44px; background: var(--sky-soft); border-radius: 10px; display: grid; place-items: center; margin-bottom: 16px; color: var(--sky-dk); }
+.feat-ico { width: 44px; height: 44px; background: var(--sky-soft); border-radius: 0; display: grid; place-items: center; margin-bottom: 16px; color: var(--sky-dk); }
 .feat-ico svg { width: 22px; height: 22px; }
 .feat h3 { font-size: 17px; margin-bottom: 8px; }
 .feat p { font-size: 14px; line-height: 1.55; color: var(--ink-3); }
@@ -544,7 +560,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .nav-badge {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px;
-  border-radius: 9px; background: var(--red); color: #fff;
+  border-radius: 0; background: var(--red); color: #fff;
   font-size: 11px; font-weight: 700; line-height: 1;
 }
 .chat {
@@ -566,7 +582,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .chat-msg.mine { align-self: flex-end; align-items: flex-end; }
 .chat-msg.their { align-self: flex-start; align-items: flex-start; }
 .chat-bubble {
-  padding: 8px 12px; border-radius: 14px; font-size: 14px; line-height: 1.4;
+  padding: 8px 12px; border-radius: 0; font-size: 14px; line-height: 1.4;
   white-space: pre-wrap; word-break: break-word;
 }
 .chat-msg.mine .chat-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
@@ -578,7 +594,7 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 }
 .chat-input textarea {
   flex: 1; resize: none; min-height: 38px; max-height: 120px;
-  padding: 9px 12px; border: 1px solid var(--line-2); border-radius: 10px;
+  padding: 9px 12px; border: 1px solid var(--line-2); border-radius: 0;
   font: inherit; font-size: 14px; background: var(--bg-2); color: var(--ink);
 }
 .chat-input textarea:focus { outline: none; border-color: var(--accent); }
@@ -601,7 +617,7 @@ body.role-driver .chat-msg.their .chat-bubble { background: var(--bg-2); color: 
 .cancelreq-head .ic { width: 18px; height: 18px; flex-shrink: 0; }
 .cancelreq-lead { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin-bottom: 12px; }
 .cancelreq-meta { font-size: 13.5px; color: var(--ink); }
-.cancelreq-reason { margin-top: 6px; font-size: 14px; font-style: italic; color: var(--ink-2); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.cancelreq-reason { margin-top: 6px; font-size: 14px; font-style: italic; color: var(--ink-2); background: var(--paper); border: 1px solid var(--line); border-radius: 0; padding: 10px 12px; }
 
 /* =====================================================================
    ROLLEN-KENNUNG — visuelle Unterscheidung Reiter vs. Transporteur
