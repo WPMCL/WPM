@@ -449,8 +449,11 @@ const API = {
 
   /** Offene, zukuenftige Leerfahrten (fuer Reiter zum Stoebern). */
   async listOpenEmptyRuns() {
-    const { data, error } = await sb.from('empty_runs').select('*')
-      .eq('status', 'open').order('when_ts', { ascending: true });
+    const u = await this.currentUser();
+    let q = sb.from('empty_runs').select('*').eq('status', 'open');
+    // Eigene Leerfahrten ausschliessen — man bewirbt sich nicht selbst.
+    if (u) q = q.neq('driver_id', u.id);
+    const { data, error } = await q.order('when_ts', { ascending: true });
     if (error) throw new Error(error.message);
     const runs = (data || []).map(rowToEmptyRun);
     for (const r of runs) {
@@ -489,6 +492,7 @@ const API = {
     const run = await this.getEmptyRun(emptyRunId);
     if (!run) throw new Error('Leerfahrt nicht gefunden');
     if (run.status !== 'open') throw new Error('Diese Leerfahrt nimmt keine Bewerbungen mehr an.');
+    if (run.driverId === riderId) throw new Error('Du kannst dich nicht auf deine eigene Leerfahrt bewerben.');
     const row = {
       empty_run_id: emptyRunId, rider_id: riderId,
       pickup_label: pickup.label, pickup_lat: pickup.lat, pickup_lng: pickup.lng,

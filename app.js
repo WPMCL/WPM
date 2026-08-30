@@ -99,7 +99,7 @@ const App = {
       const go = () => {
         // Eingeloggt: zurück zur Haupt-Ansicht der aktuellen Rolle (erster Tab)
         this.destroyMaps();
-        if (this.state.role === 'rider') this.state.riderTab = 'anfrage';
+        if (this.state.role === 'rider') this.state.riderTab = 'auftraege';
         else if (this.state.role === 'driver') this.state.driverTab = 'auftraege';
         this.render();
         window.scrollTo(0, 0);
@@ -557,22 +557,22 @@ const App = {
           <p>Stell eine Anfrage an Transporteure in deiner Nähe. Du erhältst nur echte Angebote — jeder Transporteur entscheidet selbst und nennt dir vorab seinen Preis.</p>
         </div>
         <div class="tabs" id="riderTabs">
-          <button data-tab="anfrage">Anfrage stellen</button>
           <button data-tab="auftraege">Meine Anfragen</button>
           <button data-tab="leerfahrten">Leerfahrten</button>
           <button data-tab="profil">Mein Profil</button>
         </div>
         <div id="riderBody"></div>
       </div>`;
+    // Falls noch der alte Tab-Wert gespeichert ist, auf "auftraege" umlenken
+    if (this.state.riderTab === 'anfrage') this.state.riderTab = 'auftraege';
     this.el.querySelectorAll('#riderTabs button').forEach((b) => {
       b.classList.toggle('active', b.dataset.tab === this.state.riderTab);
       b.addEventListener('click', () => { this.destroyMaps(); this.state.riderTab = b.dataset.tab; this.renderRider(); });
     });
     const body = document.getElementById('riderBody');
-    if (this.state.riderTab === 'anfrage') this.riderRequestForm(body);
-    else if (this.state.riderTab === 'auftraege') this.riderRequests(body);
-    else if (this.state.riderTab === 'leerfahrten') this.riderEmptyRuns(body);
-    else this.riderProfile(body);
+    if (this.state.riderTab === 'leerfahrten') this.riderEmptyRuns(body);
+    else if (this.state.riderTab === 'profil') this.riderProfile(body);
+    else this.riderRequests(body);
   },
 
   async riderRequestForm(body) {
@@ -602,19 +602,9 @@ const App = {
     }
     const d = this.state.draft;
     const isEdit = !!editReq;
-    // Formular ist standardmäßig eingeklappt; beim Bearbeiten immer offen.
-    const formOpen = isEdit || !!this.state.requestFormOpen;
 
     body.innerHTML = `
-      ${formOpen ? '' : `
-      <div class="create-cta">
-        <div>
-          <h2>Transport für dein Pferd?</h2>
-          <p>Stell eine Anfrage und erhalte Angebote von Transporteuren in deiner Nähe.</p>
-        </div>
-        <button class="btn btn-primary btn-lg" id="openRequestForm">${ICON.send()} Anfrage erstellen</button>
-      </div>`}
-      <div class="grid grid-2-wide" style="${formOpen ? '' : 'display:none'}">
+      <div class="grid grid-2-wide">
         <div class="card">
           <div class="card-head"><h2>${isEdit ? 'Anfrage bearbeiten' : 'Neue Transportanfrage'}</h2>${isEdit ? '<button class="btn-reset" id="cancelEdit">Abbrechen</button>' : '<button class="btn-reset" id="closeRequestForm">Schließen</button>'}</div>
           <div class="card-pad">
@@ -656,30 +646,24 @@ const App = {
         </div>
       </div>`;
 
-    // Aufklappen/Einklappen des Formulars
-    document.getElementById('openRequestForm') && document.getElementById('openRequestForm').addEventListener('click', () => {
-      this.state.requestFormOpen = true;
-      this.renderRider();
-    });
+    // Formular schließen (nur im Neu-Modus)
     document.getElementById('closeRequestForm') && document.getElementById('closeRequestForm').addEventListener('click', () => {
       this.state.requestFormOpen = false;
       this.renderRider();
     });
 
-    // Karte + Felder nur verdrahten, wenn das Formular sichtbar ist
-    if (formOpen) {
-      this.initMap('routeMap');
-      this.wireAddrField('pickup');
-      this.wireAddrField('dropoff');
-      this.wireStepper('horseCount');
-      if (d.pickup && d.dropoff && d.route) this.updateRoutePreview();
-    }
+    // Karte + Felder verdrahten (Formular ist hier immer sichtbar)
+    this.initMap('routeMap');
+    this.wireAddrField('pickup');
+    this.wireAddrField('dropoff');
+    this.wireStepper('horseCount');
+    if (d.pickup && d.dropoff && d.route) this.updateRoutePreview();
 
     // Bearbeiten abbrechen -> zurück zur Anfragenliste, Draft verwerfen
     document.getElementById('cancelEdit') && document.getElementById('cancelEdit').addEventListener('click', () => {
       this.state.editingRequestId = null;
       this.state.draft = { pickup: rider.location ? { ...rider.location } : null, dropoff: null, route: null };
-      this.state.riderTab = 'auftraege';
+      this.state.requestFormOpen = false;
       this.renderRider();
     });
 
@@ -852,19 +836,35 @@ const App = {
   },
 
   async riderRequests(body) {
-    body.innerHTML = `<div class="list" id="reqList">${skeletonList(2)}</div>`;
+    const formOpen = !!this.state.requestFormOpen || !!this.state.editingRequestId;
+    body.innerHTML = `
+      <div id="reqFormArea">${formOpen ? '' : `
+        <div class="create-cta">
+          <div>
+            <h2>Transport für dein Pferd?</h2>
+            <p>Stell eine Anfrage und erhalte Angebote von Transporteuren in deiner Nähe.</p>
+          </div>
+          <button class="btn btn-primary btn-lg" id="openRequestForm">${ICON.send()} Anfrage erstellen</button>
+        </div>`}</div>
+      <div class="section-label" style="margin-top:${formOpen ? '26' : '4'}px">Meine Anfragen</div>
+      <div class="list" id="reqList">${skeletonList(2)}</div>`;
+
+    // Öffnen-Button verdrahten (nur wenn eingeklappt)
+    const openBtn = document.getElementById('openRequestForm');
+    if (openBtn) openBtn.addEventListener('click', () => { this.state.requestFormOpen = true; this.renderRider(); });
+    // Formular aufgeklappt? -> in den Formularbereich rendern
+    if (formOpen) this.riderRequestForm(document.getElementById('reqFormArea'));
+
     const requests = await API.listRequestsForRider(this.state.riderId);
     const list = document.getElementById('reqList');
     if (!list) return;
     if (!requests.length) {
-      list.innerHTML = emptyState(ICON.horse(), 'Noch keine Anfragen', 'Stelle deine erste Transportanfrage im Tab „Anfrage stellen".');
+      list.innerHTML = emptyState(ICON.horse(), 'Noch keine Anfragen', 'Erstelle oben deine erste Transportanfrage.');
       return;
     }
     const blocks = await Promise.all(requests.map((r) => this.riderRequestBlock(r)));
     if (!document.getElementById('reqList')) return;
     list.innerHTML = blocks.join('');
-    // Mini-Karten erst zeichnen, wenn das Layout steht (Container hat Höhe).
-    // Fallback-Linie, falls einer Anfrage die gecachte Route fehlt.
     requestAnimationFrame(() => {
       requests.forEach((r) => {
         if (!document.getElementById('map-' + r.id)) return;
@@ -1090,7 +1090,9 @@ const App = {
     this.el.querySelectorAll('[data-edit-request]').forEach((b) =>
       b.addEventListener('click', () => {
         this.state.editingRequestId = b.dataset.editRequest;
-        this.state.riderTab = 'anfrage';
+        this.state.riderTab = 'auftraege';
+        this.state.requestFormOpen = true;
+        window.scrollTo(0, 0);
         this.renderRider();
       }));
     // Offene Anfrage loeschen (mit Rueckfrage)
@@ -2028,7 +2030,11 @@ const App = {
     }
 
     // Offene Leerfahrten
-    const runs = await API.listOpenEmptyRuns();
+    const allRuns = await API.listOpenEmptyRuns();
+    // Eigene Leerfahrten nicht in der Bewerben-Liste zeigen (man bewirbt
+    // sich nicht auf die eigene Fahrt). Reiter und Fahrer teilen die User-ID.
+    const myId = this.state.profile?.id;
+    const runs = allRuns.filter((r) => r.driverId !== myId);
     const list = document.getElementById('openRunList');
     if (!list) return;
     // eigene Bewerbungen zuordnen (schon beworben?)
