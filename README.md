@@ -1,238 +1,31 @@
-# Werpfährtmich?
+# Clair Lut — Pferdegalerie
 
-Vermittlungsplattform für Pferdetransporte. Reiter stellen Anfragen,
-Fahrer geben aktiv Angebote ab. Läuft komplett im Browser (statisch)
-und nutzt **Supabase** für Anmeldung, Datenbank und Datei-Uploads.
+Eine einfache, deutschsprachige Webseite zum Vorstellen deiner Pferdegemälde. Reines HTML/CSS/JS — läuft direkt auf GitHub Pages, kein Server nötig.
 
----
+## So bringst du sie auf GitHub Pages
 
-## Was du brauchst
+1. Erstelle auf github.com ein neues Repository, z. B. `clair-lut-pferdegalerie`.
+2. Lade **alle Dateien aus diesem Ordner** (`index.html`, `css/`, `js/`, `images/`) in das Repository hoch (per Web-Upload oder `git push`).
+3. Gehe im Repo zu **Settings → Pages**.
+4. Unter „Build and deployment“ wähle **Source: Deploy from a branch**, Branch: `main`, Ordner: `/ (root)`. Speichern.
+5. Nach 1–2 Minuten ist die Seite live unter `https://<dein-github-name>.github.io/<repo-name>/`.
 
-- Ein kostenloses **GitHub**-Konto (für das Hosting)
-- Ein kostenloses **Supabase**-Konto (für Anmeldung + Datenbank)
-- Keinen eigenen Server, keine Programmierkenntnisse für die Einrichtung
+## Was du noch anpassen solltest
 
-Plane etwa 20–30 Minuten für die einmalige Einrichtung.
+- **Titel, Technik, Maße, Preise**: Jedes Werk steht in `index.html` als eigener `<article class="artwork">`-Block. Aktuell steht bei allen vieren „Original · Technik & Maße auf Anfrage“ und „Preis auf Anfrage“ als Platzhalter — trag dort die echten Angaben ein, sobald du sie hast (und ändere den Status zu „Verkauft“, sobald ein Bild verkauft ist — die Klasse dafür heißt `status-sold` statt `status-available`).
+- **Weitere Gemälde hinzufügen**: Einfach einen kompletten `<article class="artwork">`-Block (innerhalb eines `<div class="gallery-col">`) kopieren und Bild/Text anpassen.
+- **Bilder austauschen**: Lade eine neue Datei in `images/` hoch und passe den `src="images/..."`-Pfad an der passenden Stelle in `index.html` an. Achte auf ein ähnliches Seitenverhältnis wie das bisherige Bild, sonst wird es unschön zugeschnitten — das lässt sich über `style="--ratio: Breite / Höhe;"` am `<div class="artwork-image">` einstellen.
+- **Kontakt**: Die E-Mail-Adresse ist aktuell `claraluety@googlemail.com` (im `mailto:`-Link und im Fließtext in `index.html`) — dort ändern, falls du eine andere Adresse nutzen möchtest.
+- **Vor Ort**: Café Bodien, Bergsdorf steht im Abschnitt „Vor Ort“ — dort auch Öffnungszeiten oder eine genaue Adresse ergänzen, falls gewünscht.
+- **Signatur/Name**: Aktuell erscheint überall „Clair Lut“ als Künstlername (im Logo oben und in der „clair lut“-Sektion).
 
----
+## Struktur
 
-## Schritt 1 — Supabase-Projekt anlegen
+```
+index.html        ← der gesamte Seiteninhalt
+css/styles.css     ← Layout & Farben
+js/script.js       ← nur die Jahreszahl im Footer
+images/            ← deine Bilder (Gemälde-Fotos + zwei Nahaufnahmen als Deko-Akzente)
+```
 
-1. Auf https://supabase.com registrieren und einloggen.
-2. **"New project"** klicken. Namen vergeben (z. B. `werpfaehrtmich`),
-   ein Datenbank-Passwort setzen (aufschreiben!), Region **Central EU
-   (Frankfurt)** wählen — das ist für deutsche Nutzer am schnellsten und
-   datenschutzfreundlich.
-3. Warten, bis das Projekt bereit ist (ca. 2 Minuten).
-
-## Schritt 2 — Datenbank einrichten
-
-1. In Supabase links auf **"SQL Editor"** klicken, dann **"New query"**.
-2. Den **gesamten Inhalt** der Datei `supabase-schema.sql` (liegt in
-   diesem Projekt) hineinkopieren.
-3. **"Run"** klicken. Es sollte "Success" erscheinen. Damit sind alle
-   Tabellen, Sicherheitsregeln und der Dokumenten-Speicher angelegt.
-
-## Schritt 3 — Anmelde-Einstellungen
-
-1. Links auf **"Authentication"** -> **"Sign In / Providers"**.
-2. **"Email"** ist standardmäßig aktiv — das genügt (E-Mail + Passwort).
-3. **Wichtig für den Anfang:** Unter **"Authentication" -> "Sign In /
-   Providers" -> "Email"** gibt es die Option **"Confirm email"**.
-   - **Zum Testen** kannst du sie **ausschalten** — dann sind neue Nutzer
-     sofort angemeldet, ohne Bestätigungs-E-Mail.
-   - **Für den echten Betrieb** solltest du sie **einschalten**, damit nur
-     Leute mit gültiger E-Mail ein Konto bekommen. Die App zeigt in dem
-     Fall automatisch den Hinweis "Bitte bestätige deine E-Mail".
-
-## Schritt 4 — Deine Zugangsdaten eintragen
-
-1. In Supabase links auf das **Zahnrad** (Project Settings) -> **"API"**.
-2. Du brauchst zwei Werte von dort:
-   - **"Project URL"**
-   - **"Project API keys" -> "anon" "public"** (NICHT den `service_role`!)
-3. Öffne die Datei `js/config.js` in diesem Projekt und trage beide Werte
-   ein:
-
-   ```js
-   window.WPM_CONFIG = {
-     SUPABASE_URL: 'https://deinprojekt.supabase.co',
-     SUPABASE_ANON_KEY: 'eyJhbGci...dein-langer-key...',
-   };
-   ```
-
-   > Der `anon`-Key darf öffentlich im Browser stehen — das ist so
-   > vorgesehen. Deine Daten sind durch die Sicherheitsregeln (Row Level
-   > Security) geschützt, die in Schritt 2 eingerichtet wurden. Trage
-   > **niemals** den `service_role`-Key hier ein.
-
-## Schritt 5 — Auf GitHub hochladen
-
-1. Auf https://github.com ein **neues Repository** anlegen (z. B.
-   `werpfaehrtmich`), Sichtbarkeit **Public**.
-2. Alle Dateien dieses Projekts hochladen (per Drag & Drop im Browser auf
-   "uploading an existing file", oder per Git). Die Struktur muss so
-   bleiben:
-
-   ```
-   index.html
-   styles.css
-   supabase-schema.sql
-   README.md
-   js/
-     config.js   <- mit deinen Werten
-     icons.js
-     api.js
-     app.js
-   ```
-
-## Schritt 6 — GitHub Pages aktivieren
-
-1. Im Repository oben auf **"Settings"** -> links **"Pages"**.
-2. Unter **"Build and deployment" -> "Source"**: **"Deploy from a branch"**.
-3. Branch **`main`** wählen, Ordner **`/ (root)`**, **"Save"**.
-4. Nach ein bis zwei Minuten erscheint oben die Adresse deiner Seite,
-   z. B. `https://deinname.github.io/werpfaehrtmich/`.
-
-## Schritt 7 — Domain in Supabase erlauben
-
-Damit die Anmeldung von deiner GitHub-Pages-Adresse aus funktioniert:
-
-1. In Supabase: **"Authentication" -> "URL Configuration"**.
-2. Bei **"Site URL"** deine GitHub-Pages-Adresse eintragen.
-3. Dieselbe Adresse zusätzlich unter **"Redirect URLs"** hinzufügen.
-
-Fertig. Ruf deine Seite auf, registriere dich, und die App läuft mit
-echter Datenbank.
-
----
-
-## Testlauf-Empfehlung
-
-1. Registriere zwei Konten (z. B. mit zwei E-Mail-Adressen) — eins als
-   Reiter, eins als Fahrer.
-2. Fülle beim Fahrer-Konto das **Fahrer-Profil** aus (Standort, Fahrzeug,
-   Preise, Verfügbarkeit, Zahlungsarten, Dokumente). Der Standort ist
-   Pflicht — darüber finden Reiter den Fahrer im Umkreis.
-3. Stelle mit dem Reiter-Konto eine Anfrage.
-4. Wechsle zum Fahrer-Konto: Die Anfrage sollte unter "Passende Anfragen"
-   erscheinen (sofern Umkreis, Zeit und Kapazität passen).
-
----
-
-## Wichtige Hinweise
-
-**Kartendienste.** Die Adresssuche (Nominatim) und Routenberechnung
-(OSRM) nutzen die kostenlosen öffentlichen Server von OpenStreetMap.
-Für einen echten, stark genutzten Betrieb haben diese Nutzungslimits —
-dann solltest du einen eigenen oder bezahlten Dienst (z. B. Mapbox)
-einbinden. Die Kartenkacheln kommen von CARTO.
-
-**Stornofenster.** In `supabase-schema.sql` ist das Stornofenster nach
-Annahme auf 10 Minuten gesetzt (`cancel_window_ms` = 600000). Das ist
-der Produktivwert.
-
-**Rechtliches — bitte ernst nehmen.** Sobald echte Nutzer echte Daten
-hinterlegen (Namen, Telefonnummern, hochgeladene Ausweisdokumente),
-brauchst du vor dem öffentlichen Start:
-- ein **Impressum**,
-- eine **Datenschutzerklärung** (DSGVO), gerade wegen der
-  Dokument-Uploads (das sind besonders sensible Daten),
-- klare **Haftungs- und Nutzungsbedingungen**.
-
-Das ist keine Rechtsberatung. Lass diese Punkte vor dem Livegang von
-einer Fachanwältin oder einem Fachanwalt prüfen.
-
----
-
-## Aufbau des Codes (zur Orientierung)
-
-- **`index.html`** — lädt die Bibliotheken (Leaflet, Supabase) und die
-  App-Dateien.
-- **`js/config.js`** — deine Supabase-Zugangsdaten.
-- **`js/api.js`** — die gesamte Kommunikation mit Supabase (Anmeldung,
-  Datenbank, Datei-Upload). Auch Adresssuche und Routing.
-- **`js/app.js`** — die Benutzeroberfläche und Abläufe (Anfragen,
-  Angebote, Fahrt-Lebenszyklus, Bewertungen).
-- **`js/icons.js`** — die Symbole (SVG).
-- **`styles.css`** — das komplette Design.
-- **`supabase-schema.sql`** — die Datenbankstruktur (einmalig ausführen).
-
-## Neue Storno- und Zuverlässigkeitslogik
-
-Die aktuelle App-Version enthält:
-
-* ein kostenloses 10-Minuten-Stornofenster nach Annahme,
-* verpflichtende Begründung jeder Absage nach Ablauf dieses Fensters,
-* Stornokategorien von „frühzeitig abgesagt“ bis „nicht erschienen“,
-* Fahrer-seitig frei definierbare Stornobedingungen je Zeitraum,
-* Speicherung der zum Zeitpunkt des Angebots geltenden Stornobedingungen,
-* kompakte Zuverlässigkeitsangabe direkt im Angebot,
-* detaillierte Zuverlässigkeitsstatistik ausschließlich im Profil,
-* verpflichtende Fahrzeugangaben sowie Führerschein und Transport-Nachweis für aktive Fahrerprofile.
-
-### Zweistufige Absage (neu)
-
-Nach Ablauf des 10-Minuten-Fensters ist eine Absage jetzt zweistufig:
-eine Seite **beantragt** die Absage mit Grund und Begründung, die andere
-Seite wird informiert und muss sie **bestätigen** (optional mit einem
-Kommentar, z. B. „Bitte rufen Sie mich an"). Erst mit der Bestätigung
-wird die Fahrt endgültig abgesagt und gilt als einvernehmlich. Der
-Antragsteller kann seinen Antrag zurückziehen, solange noch nicht
-bestätigt wurde.
-
-### Leerfahrten (neu)
-
-Transporteure können **Leerfahrten** einstellen: freie Plätze auf einer
-ohnehin geplanten Fahrt (Route A→B, Zeit, Anzahl Plätze, optionaler
-Preis und Notiz). Anders als bei regulären Anfragen gilt für Leerfahrten
-**keine 65-km-Grenze**, da diese meist von beruflichen Fahrern über
-längere Strecken angeboten werden.
-
-Pferdebesitzer sehen offene Leerfahrten in einem eigenen Tab und
-**bewerben** sich mit ihrer eigenen Teilstrecke (von wo bis wo das Pferd
-soll), der Anzahl Pferde und dem Hinweis, ob Verladehilfe nötig ist.
-
-Der Transporteur kann **mehrere Bewerbungen** annehmen (großer Hänger,
-mehrere Pferde von verschiedenen Bewerbern). Es gibt kein hartes
-Platzlimit — der belegte Stand wird nur als Hinweis angezeigt („2/4
-Plätze belegt"). Die Leerfahrt bleibt für weitere Bewerbungen offen, bis
-der Fahrer sie über **„Restliche absagen & Leerfahrt schließen"** aktiv
-schließt. Jede angenommene Fahrt hat ihren **eigenen** Lebenszyklus und
-ist separat absag- und abschließbar (inklusive Kulanzfenster,
-zweistufiger Absage und Abschlussbestätigung).
-
-### Konto löschen (neu)
-
-Reiter und Transporteure können ihr Konto im Profil endgültig löschen.
-Bestehen noch laufende Fahrten (angenommen, nicht abgeschlossen), weist
-die App darauf hin, dass diese zuerst beendet oder abgesagt werden
-müssen. Die Löschung selbst läuft über eine Datenbank-Funktion, damit der
-öffentliche anon-Key kein Konto direkt entfernen kann.
-
-### In-App-Chat & Admin-Meldungen (neu)
-
-**Fahrt-Chat.** Sobald ein Angebot bzw. eine Leerfahrt-Bewerbung
-angenommen ist, erscheint bei beiden Beteiligten ein Chat-Fenster direkt
-an der Fahrt. Es bleibt nutzbar, bis beide Seiten die Fahrt abgeschlossen
-haben, und wird danach zu einem Nur-Lese-Archiv. Nachrichten sind
-ausschließlich für die zwei Beteiligten sichtbar (per Row Level
-Security).
-
-**Meldungen für Admins.** Admin-Konten (Profil-Feld `is_admin = true`)
-sehen weiterhin den Tab „Admin" mit allen Meldungen als Ticket-Liste.
-Neu ist ein Zähler-Badge am „Admin"-Knopf, das die Zahl offener
-Meldungen anzeigt — so sieht man neue Meldungen sofort, ohne
-nachzuschauen. Dafür ist keine eigene Migration nötig.
-
----
-
-## Hinweis zur Datenbank-Einrichtung
-
-Die Datei **`supabase-schema.sql`** enthält das **komplette** Datenmodell
-mit allen Funktionen (Anfragen, Angebote, Leerfahrten, Bewerbungen,
-Meldungen, Chat, Konto-Löschung, Selbstauskunft, zwei­stufige Absage).
-Es genügt, diese **eine** Datei einmal im Supabase-SQL-Editor auszuführen
-— es sind keine separaten Migrationsdateien mehr nötig. Das Skript ist so
-geschrieben, dass es gefahrlos erneut ausgeführt werden kann (es legt nur
-an, was noch fehlt).
+Kein Build-Prozess, keine Abhängigkeiten — einfach Dateien bearbeiten und neu hochladen.
