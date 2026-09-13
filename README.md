@@ -1,4 +1,4 @@
-# Clair Lut — Pferdegalerie
+# Clair Lutti — Pferdegalerie
 
 Eine einfache, deutschsprachige Webseite zum Vorstellen deiner Pferdegemälde. Reines HTML/CSS/JS — läuft direkt auf GitHub Pages, kein Server nötig.
 
@@ -26,7 +26,7 @@ Beim Hochladen sind `css/styles.css`, `js/script.js` und alle Bilder aus den Unt
 - **Bilder austauschen**: Lade die neue Datei einfach mit in den Hauptordner hoch und passe den `src="..."`-Dateinamen an der passenden Stelle in `index.html` an. Achte auf ein ähnliches Seitenverhältnis wie das bisherige Bild, sonst wird es unschön zugeschnitten — das lässt sich über `style="--ratio: Breite / Höhe;"` am `<div class="artwork-image">` einstellen.
 - **Kontakt**: Die E-Mail-Adresse ist aktuell `claraluety@googlemail.com` (im `mailto:`-Link und im Fließtext in `index.html`) — dort ändern, falls du eine andere Adresse nutzen möchtest.
 - **Vor Ort**: Café Bodien, Bergsdorf steht im Abschnitt „Vor Ort“ — dort auch Öffnungszeiten oder eine genaue Adresse ergänzen, falls gewünscht.
-- **Signatur/Name**: Aktuell erscheint überall „Clair Lut“ als Künstlername (im Logo oben und in der „clair lut“-Sektion).
+- **Signatur/Name**: Aktuell erscheint überall „Clair Lutti“ als Künstlername (im Logo oben und in der „clair lutti“-Sektion).
 
 ## Struktur
 

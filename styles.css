@@ -201,14 +201,14 @@ h1, h2, h3 {
 
 .about-peek-image {
   position: absolute;
-  width: 34%;
+  width: 54%;
   aspect-ratio: 1 / 1;
   object-fit: cover;
   border-radius: 4px;
-  right: -14%;
-  bottom: -46px;
+  right: -20%;
+  bottom: -68px;
   box-shadow: 0 18px 30px -14px rgba(36, 27, 22, 0.4);
-  border: 6px solid var(--paper);
+  border: 8px solid var(--paper);
   z-index: 1;
   transform: rotate(4deg);
 }
@@ -273,8 +273,8 @@ h1, h2, h3 {
   position: absolute;
   left: 0;
   top: 46%;
-  width: 190px;
-  transform: translate(-58%, -50%) rotate(-7deg);
+  width: 340px;
+  transform: translate(-55%, -50%) rotate(-7deg);
   border-radius: 4px;
   box-shadow: 0 20px 34px -16px rgba(0, 0, 0, 0.45);
   opacity: 0.9;
